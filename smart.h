@@ -3,7 +3,7 @@
 
 #include <glib.h>
 
-typedef struct SkDevice SkDevice;
+typedef struct SkDisk SkDisk;
 
 typedef struct SkIdentifyParsedData {
     gchar serial[21];
@@ -73,25 +73,25 @@ typedef struct SkSmartAttribute {
      * considered an ABI change. So take care when you copy it. */
 } SkSmartAttribute;
 
-typedef void (*SkSmartAttributeCallback)(SkDevice *d, const SkSmartAttribute *a, gpointer userdata);
+typedef void (*SkSmartAttributeCallback)(SkDisk *d, const SkSmartAttribute *a, gpointer userdata);
 
-int sk_disk_open(const gchar *name, SkDevice **d);
+int sk_disk_open(const gchar *name, SkDisk **d);
 
-int sk_disk_check_power_mode(SkDevice *d, gboolean *mode);
+int sk_disk_check_power_mode(SkDisk *d, gboolean *mode);
 
-int sk_disk_identify_is_available(SkDevice *d, gboolean *b);
-int sk_disk_identify_parse(SkDevice *d, const SkIdentifyParsedData **data);
+int sk_disk_identify_is_available(SkDisk *d, gboolean *b);
+int sk_disk_identify_parse(SkDisk *d, const SkIdentifyParsedData **data);
 
-int sk_disk_smart_is_available(SkDevice *d, gboolean *b);
-int sk_disk_smart_read_data(SkDevice *d);
-int sk_disk_smart_parse(SkDevice *d, const SkSmartParsedData **data);
-int sk_disk_smart_parse_attributes(SkDevice *d, SkSmartAttributeCallback cb, gpointer userdata);
+int sk_disk_smart_is_available(SkDisk *d, gboolean *b);
+int sk_disk_smart_read_data(SkDisk *d);
+int sk_disk_smart_parse(SkDisk *d, const SkSmartParsedData **data);
+int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeCallback cb, gpointer userdata);
 
-int sk_disk_get_size(SkDevice *d, guint64 *bytes);
+int sk_disk_get_size(SkDisk *d, guint64 *bytes);
 
-int sk_disk_dump(SkDevice *d);
+int sk_disk_dump(SkDisk *d);
 
-void sk_disk_free(SkDevice *d);
+void sk_disk_free(SkDisk *d);
 
 const char* sk_smart_offline_data_collection_status_to_string(SkSmartOfflineDataCollectionStatus status);
 const char* sk_smart_attribute_unit_to_string(SkSmartAttributeUnit unit);
