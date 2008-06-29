@@ -342,7 +342,7 @@ int sk_disk_smart_read_data(SkDevice *d) {
     cmd[3] = GUINT16_TO_BE(0x00C2U);
     cmd[4] = GUINT16_TO_BE(0x4F00U);
 
-    if ((ret = disk_ata_command(d, SK_ATA_COMMAND_SMART, SK_DIRECTION_IN, cmd, d->smart_data, &len)) < 0)
+    if ((ret = sk_disk_command(d, SK_ATA_COMMAND_SMART, SK_DIRECTION_IN, cmd, d->smart_data, &len)) < 0)
         return ret;
 
     d->smart_data_valid = TRUE;
