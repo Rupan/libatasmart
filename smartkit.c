@@ -11,7 +11,10 @@
 #include <scsi/sg.h>
 #include <scsi/scsi_ioctl.h>
 #include <linux/hdreg.h>
+#include <linux/fs.h>
 #include <glib.h>
+
+#include "smart.h"
 
 #define SK_TIMEOUT 2000
 
@@ -23,20 +26,31 @@ typedef enum SkDirection {
 } SkDirection;
 
 typedef enum SkDeviceType {
+    SK_DEVICE_TYPE_ATA_PASSTHROUGH, /* ATA passthrough over SCSI transport */
     SK_DEVICE_TYPE_ATA,
     SK_DEVICE_TYPE_SCSI,
-    SK_DEVICE_TYPE_ATA_PASSTHROUGH, /* ATA passthrough over SCSI transport */
+    SK_DEVICE_TYPE_UNKNOWN,
     _SK_DEVICE_TYPE_MAX
 } SkDeviceType;
 
-typedef struct SkDevice {
+struct SkDevice {
     gchar *name;
     int fd;
     SkDeviceType type;
+
+    guint64 size;
+
     guint8 identify[512];
     guint8 smart_data[512];
-    gboolean smart_data_valid;
-} SkDevice;
+    guint8 smart_threshold_data[512];
+
+    gboolean identify_data_valid:1;
+    gboolean smart_data_valid:1;
+    gboolean smart_threshold_data_valid:1;
+
+    SkIdentifyParsedData identify_parsed_data;
+    SkSmartParsedData smart_parsed_data;
+};
 
 /* ATA commands */
 typedef enum SkAtaCommand {
@@ -71,6 +85,14 @@ typedef enum SkSmartTest {
     SK_SMART_TEST_CAPTIVE_MASK = 128,
     SK_SMART_TEST_ABORT = 127
 } SkSmartTest;
+
+static gboolean disk_smart_is_available(SkDevice *d) {
+    return d->identify_data_valid && !!(d->identify[164] & 1);
+}
+
+static gboolean disk_smart_is_enabled(SkDevice *d) {
+    return d->identify_data_valid && !!(d->identify[170] & 1);
+}
 
 static int disk_ata_command(SkDevice *d, SkAtaCommand command, SkDirection direction, gpointer cmd_data, gpointer data, size_t *len) {
     guint8 *bytes = cmd_data;
@@ -259,9 +281,9 @@ static int disk_passthrough_command(SkDevice *d, SkAtaCommand command, SkDirecti
     return ret;
 }
 
-int sk_disk_command(SkDevice *d, SkAtaCommand command, SkDirection direction, gpointer cmd_data, gpointer data, size_t *len) {
+static int disk_command(SkDevice *d, SkAtaCommand command, SkDirection direction, gpointer cmd_data, gpointer data, size_t *len) {
 
-    static int (* const disk_command[_SK_DEVICE_TYPE_MAX]) (SkDevice *d, SkAtaCommand command, SkDirection direction, gpointer cmd_data, gpointer data, size_t *len) = {
+    static int (* const disk_command_table[_SK_DEVICE_TYPE_MAX]) (SkDevice *d, SkAtaCommand command, SkDirection direction, gpointer cmd_data, gpointer data, size_t *len) = {
         [SK_DEVICE_TYPE_ATA] = disk_ata_command,
         [SK_DEVICE_TYPE_SCSI] = disk_scsi_command,
         [SK_DEVICE_TYPE_ATA_PASSTHROUGH] = disk_passthrough_command,
@@ -274,10 +296,10 @@ int sk_disk_command(SkDevice *d, SkAtaCommand command, SkDirection direction, gp
     g_assert(direction == SK_DIRECTION_NONE || (data && len && *len > 0));
     g_assert(direction != SK_DIRECTION_NONE || (!data && !len));
 
-    return disk_command[d->type](d, command, direction, cmd_data, data, len);
+    return disk_command_table[d->type](d, command, direction, cmd_data, data, len);
 }
 
-int sk_disk_identify_device(SkDevice *d) {
+static int disk_identify_device(SkDevice *d) {
     guint16 cmd[6];
     int ret;
     size_t len = 512;
@@ -286,13 +308,15 @@ int sk_disk_identify_device(SkDevice *d) {
 
     cmd[1] = GUINT16_TO_BE(1);
 
-    if ((ret = sk_disk_command(d, SK_ATA_COMMAND_IDENTIFY_DEVICE, SK_DIRECTION_IN, cmd, d->identify, &len)) < 0)
+    if ((ret = disk_command(d, SK_ATA_COMMAND_IDENTIFY_DEVICE, SK_DIRECTION_IN, cmd, d->identify, &len)) < 0)
         return ret;
 
     if (len != 512) {
         errno = EIO;
         return -1;
     }
+
+    d->identify_data_valid = TRUE;
 
     return 0;
 }
@@ -301,9 +325,14 @@ int sk_disk_check_power_mode(SkDevice *d, gboolean *mode) {
     int ret;
     guint16 cmd[6];
 
+    if (!d->identify_data_valid) {
+        errno = ENOTSUP;
+        return -1;
+    }
+
     memset(cmd, 0, sizeof(cmd));
 
-    if ((ret = sk_disk_command(d, SK_ATA_COMMAND_CHECK_POWER_MODE, SK_DIRECTION_NONE, cmd, NULL, 0)) < 0)
+    if ((ret = disk_command(d, SK_ATA_COMMAND_CHECK_POWER_MODE, SK_DIRECTION_NONE, cmd, NULL, 0)) < 0)
         return ret;
 
     if (cmd[0] != 0 || (GUINT16_FROM_BE(cmd[5]) & 1) != 0) {
@@ -316,8 +345,13 @@ int sk_disk_check_power_mode(SkDevice *d, gboolean *mode) {
     return 0;
 }
 
-int sk_disk_smart_enable(SkDevice *d, gboolean b) {
+static int disk_smart_enable(SkDevice *d, gboolean b) {
     guint16 cmd[6];
+
+    if (!disk_smart_is_available(d)) {
+        errno = ENOTSUP;
+        return -1;
+    }
 
     memset(cmd, 0, sizeof(cmd));
 
@@ -326,13 +360,18 @@ int sk_disk_smart_enable(SkDevice *d, gboolean b) {
     cmd[3] = GUINT16_TO_BE(0x00C2U);
     cmd[4] = GUINT16_TO_BE(0x4F00U);
 
-    return sk_disk_command(d, SK_ATA_COMMAND_SMART, SK_DIRECTION_NONE, cmd, NULL, 0);
+    return disk_command(d, SK_ATA_COMMAND_SMART, SK_DIRECTION_NONE, cmd, NULL, 0);
 }
 
 int sk_disk_smart_read_data(SkDevice *d) {
     guint16 cmd[6];
     int ret;
     size_t len = 512;
+
+    if (!disk_smart_is_available(d)) {
+        errno = ENOTSUP;
+        return -1;
+    }
 
     memset(cmd, 0, sizeof(cmd));
 
@@ -342,7 +381,7 @@ int sk_disk_smart_read_data(SkDevice *d) {
     cmd[3] = GUINT16_TO_BE(0x00C2U);
     cmd[4] = GUINT16_TO_BE(0x4F00U);
 
-    if ((ret = sk_disk_command(d, SK_ATA_COMMAND_SMART, SK_DIRECTION_IN, cmd, d->smart_data, &len)) < 0)
+    if ((ret = disk_command(d, SK_ATA_COMMAND_SMART, SK_DIRECTION_IN, cmd, d->smart_data, &len)) < 0)
         return ret;
 
     d->smart_data_valid = TRUE;
@@ -377,8 +416,6 @@ int sk_disk_smart_read_data(SkDevice *d) {
 
 /*     return disk_ata_command(SK_ATA_SMART, cmd, sizeof(cmd), NULL, 0); */
 /* } */
-
-void sk_disk_free(SkDevice *d);
 
 static void swap_strings(gchar *s, size_t len) {
     g_assert((len & 1) == 0);
@@ -431,145 +468,231 @@ static void read_string(gchar *d, guint8 *s, size_t len) {
     drop_spaces(d);
 }
 
-static void parse_identify(guint8 identify[512], gchar serial[21], gchar firmware[9], gchar model[41]) {
-    read_string(serial, identify+20, 20);
-    read_string(firmware, identify+46, 8);
-    read_string(model, identify+54, 40);
+int sk_disk_identify_parse(SkDevice *d, const SkIdentifyParsedData **ipd) {
+
+    if (!d->identify_data_valid) {
+        errno = ENOENT;
+        return -1;
+    }
+
+    read_string(d->identify_parsed_data.serial, d->identify+20, 20);
+    read_string(d->identify_parsed_data.firmware, d->identify+46, 8);
+    read_string(d->identify_parsed_data.model, d->identify+54, 40);
+
+    *ipd = &d->identify_parsed_data;
+
+    return 0;
 }
 
-gboolean sk_disk_smart_is_available(SkDevice *d) {
-    return !!(d->identify[164] & 1);
+int sk_disk_smart_is_available(SkDevice *d, gboolean *b) {
+
+    if (!d->identify_data_valid) {
+        errno = ENOTSUP;
+        return -1;
+    }
+
+    *b = disk_smart_is_available(d);
+    return 0;
 }
 
-gboolean sk_disk_smart_is_enabled(SkDevice *d) {
-    return !!(d->identify[170] & 1);
+int sk_disk_identify_is_available(SkDevice *d, gboolean *b) {
+
+    *b = d->identify_data_valid;
+    return 0;
 }
 
-typedef enum SkOfflineDataCollectionStatus {
-    SK_OFFLINE_NEVER,
-    SK_OFFLINE_SUCCESS,
-    SK_OFFLINE_INPROGRESS,
-    SK_OFFLINE_SUSPENDED,
-    SK_OFFLINE_ABORTED,
-    SK_OFFLINE_FATAL,
-    SK_OFFLINE_UNKNOWN
-} SkOfflineDataCollectionStatus;
+const char *sk_offline_data_collection_status_to_string(SkOfflineDataCollectionStatus status) {
 
-const char* const offline_data_collection_status_map[] = {
-    [SK_OFFLINE_NEVER] = "Off-line data collection activity was never started.",
-    [SK_OFFLINE_SUCCESS] = "Off-line data collection activity was completed without error.",
-    [SK_OFFLINE_INPROGRESS] = "Off-line activity in progress.",
-    [SK_OFFLINE_SUSPENDED] = "Off-line data collection activity was suspended by an interrupting command from host.",
-    [SK_OFFLINE_ABORTED] = "Off-line data collection activity was aborted by an interrupting command from host.",
-    [SK_OFFLINE_FATAL] = "Off-line data collection activity was aborted by the device with a fatal error.",
-    [SK_OFFLINE_UNKNOWN] = "Unknown status"
-};
+    static const char* const map[] = {
+        [SK_OFFLINE_DATA_COLLECTION_STATUS_NEVER] = "Off-line data collection activity was never started.",
+        [SK_OFFLINE_DATA_COLLECTION_STATUS_SUCCESS] = "Off-line data collection activity was completed without error.",
+        [SK_OFFLINE_DATA_COLLECTION_STATUS_INPROGRESS] = "Off-line activity in progress.",
+        [SK_OFFLINE_DATA_COLLECTION_STATUS_SUSPENDED] = "Off-line data collection activity was suspended by an interrupting command from host.",
+        [SK_OFFLINE_DATA_COLLECTION_STATUS_ABORTED] = "Off-line data collection activity was aborted by an interrupting command from host.",
+        [SK_OFFLINE_DATA_COLLECTION_STATUS_FATAL] = "Off-line data collection activity was aborted by the device with a fatal error.",
+        [SK_OFFLINE_DATA_COLLECTION_STATUS_UNKNOWN] = "Unknown status"
+    };
 
-typedef struct SkParsedSmartData {
-    SkOfflineDataCollectionStatus offline_data_collection_status;
-    unsigned selftest_execution_percent_remaining;
-    unsigned total_offline_data_collection_seconds;
+    if (status >= _SK_OFFLINE_DATA_COLLECTION_STATUS_MAX)
+        return NULL;
 
-    gboolean conveyance_test_available:1;
-    gboolean short_and_extended_test_available:1;
-    gboolean start_test_available:1;
-    gboolean abort_test_available:1;
+    return map[status];
+}
 
-    unsigned short_test_polling_minutes;
-    unsigned extended_test_polling_minutes;
-    unsigned conveyance_test_polling_minutes;
-} SkParsedSmartData;
 
-void sk_disk_smart_parse(SkDevice *d, SkParsedSmartData *data) {
-    g_assert(d->smart_data_valid);
+static const char *lookup_attribute_name(SkDevice *d, guint8 id) {
+    return "blah";
+}
+
+int sk_disk_smart_parse(SkDevice *d, const SkSmartParsedData **spd) {
+
+    if (!d->smart_data_valid) {
+        errno = ENOENT;
+        return -1;
+    }
 
     switch (d->smart_data[362]) {
         case 0x00:
         case 0x80:
-            data->offline_data_collection_status = SK_OFFLINE_NEVER;
+            d->smart_parsed_data.offline_data_collection_status = SK_OFFLINE_DATA_COLLECTION_STATUS_NEVER;
             break;
 
         case 0x02:
         case 0x82:
-            data->offline_data_collection_status = SK_OFFLINE_SUCCESS;
+            d->smart_parsed_data.offline_data_collection_status = SK_OFFLINE_DATA_COLLECTION_STATUS_SUCCESS;
             break;
 
         case 0x03:
-            data->offline_data_collection_status = SK_OFFLINE_INPROGRESS;
+            d->smart_parsed_data.offline_data_collection_status = SK_OFFLINE_DATA_COLLECTION_STATUS_INPROGRESS;
             break;
 
         case 0x04:
         case 0x84:
-            data->offline_data_collection_status = SK_OFFLINE_SUSPENDED;
+            d->smart_parsed_data.offline_data_collection_status = SK_OFFLINE_DATA_COLLECTION_STATUS_SUSPENDED;
             break;
 
         case 0x05:
         case 0x85:
-            data->offline_data_collection_status = SK_OFFLINE_ABORTED;
+            d->smart_parsed_data.offline_data_collection_status = SK_OFFLINE_DATA_COLLECTION_STATUS_ABORTED;
             break;
 
         case 0x06:
         case 0x86:
-            data->offline_data_collection_status = SK_OFFLINE_FATAL;
+            d->smart_parsed_data.offline_data_collection_status = SK_OFFLINE_DATA_COLLECTION_STATUS_FATAL;
             break;
 
         default:
-            data->offline_data_collection_status = SK_OFFLINE_UNKNOWN;
+            d->smart_parsed_data.offline_data_collection_status = SK_OFFLINE_DATA_COLLECTION_STATUS_UNKNOWN;
             break;
     }
 
-    data->selftest_execution_percent_remaining = d->smart_data[363] & 0xF;
+    d->smart_parsed_data.selftest_execution_percent_remaining = 10*(d->smart_data[363] & 0xF);
 
-    data->total_offline_data_collection_seconds = (guint16) d->smart_data[364] | ((guint16) d->smart_data[365] << 8);
+    d->smart_parsed_data.total_offline_data_collection_seconds = (guint16) d->smart_data[364] | ((guint16) d->smart_data[365] << 8);
 
-    data->conveyance_test_available = !!(d->smart_data[367] & 32);
-    data->short_and_extended_test_available = !!(d->smart_data[367] & 16);
-    data->start_test_available = !!(d->smart_data[367] & 1);
-    data->abort_test_available = !!(d->smart_data[367] & 41);
+    d->smart_parsed_data.conveyance_test_available = !!(d->smart_data[367] & 32);
+    d->smart_parsed_data.short_and_extended_test_available = !!(d->smart_data[367] & 16);
+    d->smart_parsed_data.start_test_available = !!(d->smart_data[367] & 1);
+    d->smart_parsed_data.abort_test_available = !!(d->smart_data[367] & 41);
 
-    data->short_test_polling_minutes = d->smart_data[372];
-    data->extended_test_polling_minutes = d->smart_data[373] != 0xFF ? d->smart_data[373] : ((guint16) d->smart_data[376] << 8 | (guint16) d->smart_data[375]);
-    data->conveyance_test_polling_minutes = d->smart_data[374];
+    d->smart_parsed_data.short_test_polling_minutes = d->smart_data[372];
+    d->smart_parsed_data.extended_test_polling_minutes = d->smart_data[373] != 0xFF ? d->smart_data[373] : ((guint16) d->smart_data[376] << 8 | (guint16) d->smart_data[375]);
+    d->smart_parsed_data.conveyance_test_polling_minutes = d->smart_data[374];
+
+    *spd = &d->smart_parsed_data;
+
+    return 0;
+}
+
+int sk_disk_smart_parse_attributes(SkDevice *d, SkSmartAttributeCallback cb, gpointer userdata) {
+    guint8 *p;
+    unsigned n = 0;
+
+    if (!d->smart_data_valid) {
+        errno = ENOENT;
+        return -1;
+    }
+
+    for (n = 0, p = d->smart_data + 2; n < 30; n++, p+=12) {
+        SkSmartAttribute a;
+
+        if (p[0] == 0)
+            continue;
+
+        g_printerr("attr(%i)\t = %i\t (0x02%x)\n", p[0], p[3], p[3]);
+
+        a.id = p[0];
+        a.name = lookup_attribute_name(d, p[0]);
+        a.value = p[3];
+
+        if (cb)
+            cb(d, &a, userdata);
+    }
+
+    return 0;
 }
 
 static const char *yes_no(gboolean b) {
     return  b ? "yes" : "no";
 }
 
-static void smart_dump(SkParsedSmartData *d) {
-    g_printerr("Off-line Collection Status: %s\n"
-               "Percent Self-Test Remaining: %u%%\n"
-               "Total Time To Complete Off-Line Data Collection: %u s\n"
-               "Conveyance Self-Test Available: %s\n"
-               "Short/Extended Self-Test Available: %s\n"
-               "Start Self-Test Available: %s\n"
-               "Abort Self-Test Available: %s\n",
-               offline_data_collection_status_map[d->offline_data_collection_status],
-               d->selftest_execution_percent_remaining,
-               d->total_offline_data_collection_seconds,
-               yes_no(d->conveyance_test_available),
-               yes_no(d->short_and_extended_test_available),
-               yes_no(d->start_test_available),
-               yes_no(d->abort_test_available));
+int sk_disk_dump(SkDevice *d) {
+    int ret;
+    gboolean powered = FALSE;
 
-    if (d->short_and_extended_test_available)
-        g_printerr("Short Self-Test Polling Time: %u min\n"
-                   "Extended Self-Test Polling Time: %u min\n",
-                   d->short_test_polling_minutes,
-                   d->extended_test_polling_minutes);
+    g_print("Device: %s\n"
+            "Size: %lu MiB\n",
+            d->name,
+            (unsigned long) (d->size/1024/1024));
 
-    if (d->conveyance_test_available)
-        g_printerr("Conveyance Self-Test Polling Time: %u min\n",
-                   d->conveyance_test_polling_minutes);
+    if (d->identify_data_valid) {
+        const SkIdentifyParsedData *ipd;
+
+        if ((ret = sk_disk_identify_parse(d, &ipd)) < 0)
+            return ret;
+
+        g_print("Model: [%s]\n"
+                "Serial: [%s]\n"
+                "Firmware: [%s]\n"
+                "SMART Available: %s\n",
+                ipd->model,
+                ipd->serial,
+                ipd->firmware,
+                yes_no(disk_smart_is_available(d)));
+    }
+
+    ret = sk_disk_check_power_mode(d, &powered);
+    g_print("Spin-up: %s\n",
+            ret >= 0 ? yes_no(powered) : "unknown");
+
+    if (disk_smart_is_available(d)) {
+        const SkSmartParsedData *spd;
+
+        if ((ret = sk_disk_smart_read_data(d)) < 0)
+            return ret;
+
+        if ((ret = sk_disk_smart_parse(d, &spd)) < 0)
+            return ret;
+
+        g_print("Off-line Collection Status: %s\n"
+                "Percent Self-Test Remaining: %u%%\n"
+                "Total Time To Complete Off-Line Data Collection: %u s\n"
+                "Conveyance Self-Test Available: %s\n"
+                "Short/Extended Self-Test Available: %s\n"
+                "Start Self-Test Available: %s\n"
+                "Abort Self-Test Available: %s\n",
+                sk_offline_data_collection_status_to_string(spd->offline_data_collection_status),
+                spd->selftest_execution_percent_remaining,
+                spd->total_offline_data_collection_seconds,
+                yes_no(spd->conveyance_test_available),
+                yes_no(spd->short_and_extended_test_available),
+                yes_no(spd->start_test_available),
+                yes_no(spd->abort_test_available));
+
+        if (spd->short_and_extended_test_available)
+            g_print("Short Self-Test Polling Time: %u min\n"
+                    "Extended Self-Test Polling Time: %u min\n",
+                    spd->short_test_polling_minutes,
+                    spd->extended_test_polling_minutes);
+
+        if (spd->conveyance_test_available)
+            g_print("Conveyance Self-Test Polling Time: %u min\n",
+                    spd->conveyance_test_polling_minutes);
+
+    }
+
+    return 0;
+}
+
+int sk_disk_get_size(SkDevice *d, guint64 *bytes) {
+
+    *bytes = d->size;
+    return 0;
 }
 
 int sk_disk_open(const gchar *name, SkDevice **_d) {
     SkDevice *d;
-    gboolean powered = FALSE;
-
-    gchar serial[21];
-    gchar firmware[9];
-    gchar model[41];
+    int ret = -1;
 
     g_assert(name);
     g_assert(_d);
@@ -577,55 +700,29 @@ int sk_disk_open(const gchar *name, SkDevice **_d) {
     d = g_new0(SkDevice, 1);
     d->name = g_strdup(name);
 
-    if ((d->fd = open(name, O_RDWR|O_NOCTTY)) < 0)
+    if ((d->fd = open(name, O_RDWR|O_NOCTTY)) < 0) {
+        ret = d->fd;
+        goto fail;
+    }
+
+    if ((ret = ioctl(d->fd, BLKGETSIZE64, &d->size)) < 0)
         goto fail;
 
-    d->type = SK_DEVICE_TYPE_ATA_PASSTHROUGH;
-    if (sk_disk_identify_device(d) < 0) {
+    if (d->size <= 0 || d->size == (guint64) -1) {
+        errno = EINVAL;
+        goto fail;
+    }
 
-        d->type = SK_DEVICE_TYPE_ATA;
-        if (sk_disk_identify_device(d) < 0) {
+    /* Find a way to identify the device */
+    for (d->type = 0; d->type != SK_DEVICE_TYPE_UNKNOWN; d->type++)
+        if (disk_identify_device(d) >= 0)
+            break;
 
-            d->type = SK_DEVICE_TYPE_SCSI;
-            if (sk_disk_identify_device(d) < 0)
+    /* Check if driver can do SMART, and enable if necessary */
+    if (disk_smart_is_available(d))
+        if (!disk_smart_is_enabled(d))
+            if ((ret = disk_smart_enable(d, TRUE)) < 0)
                 goto fail;
-        }
-    }
-
-    parse_identify(d->identify, serial, firmware, model);
-
-    g_printerr("Serial: [%s]\n", serial);
-    g_printerr("Firmware: [%s]\n", firmware);
-    g_printerr("Model: [%s]\n", model);
-
-    g_printerr("SMART Available: %i\n", sk_disk_smart_is_available(d));
-    g_printerr("SMART Enabled: %i\n", sk_disk_smart_is_enabled(d));
-
-    /* Check if driver can do SMART */
-    if (!sk_disk_smart_is_available(d)) {
-        errno = ENOTSUP;
-        goto fail;
-    }
-
-    /* Enable SMART */
-    if (!sk_disk_smart_is_enabled(d)) {
-        if (sk_disk_smart_enable(d, TRUE) < 0)
-            goto fail;
-        g_printerr("SMART sucessfully enabled.\n");
-    }
-
-    if (sk_disk_check_power_mode(d, &powered) < 0)
-        g_printerr("Failed to check power mode: %s", strerror(errno));
-    else
-        g_printerr("Powered up: %i\n", (int) powered);
-
-    if (sk_disk_smart_read_data(d) < 0)
-        g_printerr("Failed to read SMART data: %s", strerror(errno));
-    else {
-        SkParsedSmartData parsed_smart_data;
-        sk_disk_smart_parse(d, &parsed_smart_data);
-        smart_dump(&parsed_smart_data);
-    }
 
     *_d = d;
 
@@ -636,7 +733,7 @@ fail:
     if (d)
         sk_disk_free(d);
 
-    return -1;
+    return ret;
 }
 
 void sk_disk_free(SkDevice *d) {
@@ -647,17 +744,4 @@ void sk_disk_free(SkDevice *d) {
 
     g_free(d->name);
     g_free(d);
-}
-
-int main(int argc, char *argv[]) {
-    int ret;
-    SkDevice *d;
-
-    if ((ret = sk_disk_open(argc >= 2 ? argv[1] : "/dev/sda", &d)) < 0) {
-        g_printerr("Failed to open disk %s: %s\n", argv[1], strerror(errno));
-        return 1;
-    }
-
-    sk_disk_free(d);
-    return 0;
 }
