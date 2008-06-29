@@ -1,0 +1,20 @@
+
+
+method updateSmartData(bool wake);
+
+method startSelfTest(string which);
+
+method abortSelfTest();
+
+signal selfTestFinished();
+
+method getHistory();
+
+property device;
+
+property serial;
+property firmare;
+property model;
+
+property smart_available;
+property 
