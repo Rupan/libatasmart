@@ -28,7 +28,6 @@ typedef enum SkDirection {
 typedef enum SkDeviceType {
     SK_DEVICE_TYPE_ATA_PASSTHROUGH, /* ATA passthrough over SCSI transport */
     SK_DEVICE_TYPE_ATA,
-    SK_DEVICE_TYPE_SCSI,
     SK_DEVICE_TYPE_UNKNOWN,
     _SK_DEVICE_TYPE_MAX
 } SkDeviceType;
@@ -63,6 +62,7 @@ typedef enum SkAtaCommand {
 /* ATA SMART subcommands (ATA8 7.52.1) */
 typedef enum SkSmartCommand {
     SK_SMART_COMMAND_READ_DATA = 0xD0,
+    SK_SMART_COMMAND_READ_THRESHOLDS = 0xD1,
     SK_SMART_COMMAND_EXECUTE_OFFLINE_IMMEDIATE = 0xD4,
     SK_SMART_COMMAND_ENABLE_OPERATIONS = 0xD8,
     SK_SMART_COMMAND_DISABLE_OPERATIONS = 0xD9,
@@ -201,15 +201,6 @@ static int sg_io(int fd, int direction,
     return ioctl(fd, SG_IO, &io_hdr);
 }
 
-static int disk_scsi_command(SkDevice *d, SkAtaCommand command, SkDirection direction, gpointer cmd_data, gpointer data, size_t *len) {
-    g_assert(d->type == SK_DEVICE_TYPE_SCSI);
-
-    g_warning("SCSI disks not yet supported because Lennart doesn't have any to test this with.");
-
-    errno = ENOTSUP;
-    return -1;
-}
-
 static int disk_passthrough_command(SkDevice *d, SkAtaCommand command, SkDirection direction, gpointer cmd_data, gpointer data, size_t *len) {
     guint8 *bytes = cmd_data;
     guint8 cdb[16];
@@ -285,7 +276,6 @@ static int disk_command(SkDevice *d, SkAtaCommand command, SkDirection direction
 
     static int (* const disk_command_table[_SK_DEVICE_TYPE_MAX]) (SkDevice *d, SkAtaCommand command, SkDirection direction, gpointer cmd_data, gpointer data, size_t *len) = {
         [SK_DEVICE_TYPE_ATA] = disk_ata_command,
-        [SK_DEVICE_TYPE_SCSI] = disk_scsi_command,
         [SK_DEVICE_TYPE_ATA_PASSTHROUGH] = disk_passthrough_command,
     };
 
@@ -385,6 +375,32 @@ int sk_disk_smart_read_data(SkDevice *d) {
         return ret;
 
     d->smart_data_valid = TRUE;
+
+    return ret;
+}
+
+static int disk_smart_read_thresholds(SkDevice *d) {
+    guint16 cmd[6];
+    int ret;
+    size_t len = 512;
+
+    if (!disk_smart_is_available(d)) {
+        errno = ENOTSUP;
+        return -1;
+    }
+
+    memset(cmd, 0, sizeof(cmd));
+
+    cmd[0] = GUINT16_TO_BE(SK_SMART_COMMAND_READ_THRESHOLDS);
+    cmd[1] = GUINT16_TO_BE(1);
+    cmd[2] = GUINT16_TO_BE(0x0000U);
+    cmd[3] = GUINT16_TO_BE(0x00C2U);
+    cmd[4] = GUINT16_TO_BE(0x4F00U);
+
+    if ((ret = disk_command(d, SK_ATA_COMMAND_SMART, SK_DIRECTION_IN, cmd, d->smart_threshold_data, &len)) < 0)
+        return ret;
+
+    d->smart_threshold_data_valid = TRUE;
 
     return ret;
 }
@@ -519,9 +535,125 @@ const char *sk_offline_data_collection_status_to_string(SkOfflineDataCollectionS
     return map[status];
 }
 
+typedef struct SkSmartAttributeInfo {
+    const char *name;
+    SkSmartAttributeUnit unit;
+} SkSmartAttributeInfo;
 
-static const char *lookup_attribute_name(SkDevice *d, guint8 id) {
-    return "blah";
+/* This data is stolen from smartmontools */
+static const SkSmartAttributeInfo const attribute_info[255] = {
+    [1]   = { "raw-read-error-rate",         SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [2]   = { "throughput-perfomance",       SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
+    [3]   = { "spin-up-time",                SK_SMART_ATTRIBUTE_UNIT_MSECONDS },
+    [4]   = { "start-stop-count",            SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [5]   = { "reallocated-sector-count",    SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [6]   = { "read-channel-margin",         SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
+    [7]   = { "seek-error-rate",             SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [8]   = { "seek-time-perfomance",        SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
+    [10]  = { "spin-retry-count",            SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [11]  = { "calibration-retry-count",     SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [12]  = { "power-cycle-count",           SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [13]  = { "read-soft-error-rate",        SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [187] = { "reported-uncorrect",          SK_SMART_ATTRIBUTE_UNIT_SECTORS },
+    [189] = { "high-fly-writes",             SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [190] = { "airflow-temperature-celsius", SK_SMART_ATTRIBUTE_UNIT_KELVIN },
+    [191] = { "g-sense-error-rate",          SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [192] = { "power-off-retract-count",     SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [193] = { "load-cycle-count",            SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [194] = { "temperature-celsius-2",       SK_SMART_ATTRIBUTE_UNIT_KELVIN },
+    [195] = { "hardware-ecc-recovered",      SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [196] = { "reallocated-event-count",     SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [197] = { "current-pending-sector",      SK_SMART_ATTRIBUTE_UNIT_SECTORS },
+    [198] = { "offline-uncorrectable",       SK_SMART_ATTRIBUTE_UNIT_SECTORS },
+    [199] = { "udma-crc-error-count",        SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [200] = { "multi-zone-error-rate",       SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [201] = { "soft-read-error-rate",        SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [202] = { "ta-increase-count",           SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [203] = { "run-out-cancel",              SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [204] = { "shock-count-write-opern",     SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [205] = { "shock-rate-write-opern",      SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [206] = { "flying-height",               SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
+    [207] = { "spin-high-current",           SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
+    [208] = { "spin-buzz",                   SK_SMART_ATTRIBUTE_UNIT_UNKNOWN},
+    [209] = { "offline-seek-perfomance",     SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
+    [220] = { "disk-shift",                  SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
+    [221] = { "g-sense-error-rate-2",        SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [222] = { "loaded-hours",                SK_SMART_ATTRIBUTE_UNIT_MSECONDS },
+    [223] = { "load-retry-count",            SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [224] = { "load-friction",               SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
+    [225] = { "load-cycle-count",            SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [226] = { "load-in-time",                SK_SMART_ATTRIBUTE_UNIT_MSECONDS },
+    [227] = { "torq-amp-count",              SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [228] = { "power-off-retract-count",     SK_SMART_ATTRIBUTE_UNIT_NONE },
+    [230] = { "head-amplitude",              SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
+    [231] = { "temperature-celsius-1",       SK_SMART_ATTRIBUTE_UNIT_KELVIN },
+    [240] = { "head-flying-hours",           SK_SMART_ATTRIBUTE_UNIT_MSECONDS },
+    [250] = { "read-error-retry-rate",       SK_SMART_ATTRIBUTE_UNIT_NONE },
+};
+
+static void make_pretty(SkSmartAttribute *a) {
+    guint64 fourtyeight;
+
+    if (!a->name)
+        return;
+
+    if (a->pretty_unit == SK_SMART_ATTRIBUTE_UNIT_UNKNOWN)
+        return;
+
+    fourtyeight =
+        ((guint64) a->raw[0]) |
+        (((guint64) a->raw[1]) << 8) |
+        (((guint64) a->raw[2]) << 16) |
+        (((guint64) a->raw[3]) << 24) |
+        (((guint64) a->raw[4]) << 32) |
+        (((guint64) a->raw[5]) << 40);
+
+    if (!strcmp(a->name, "spin-up-time"))
+        a->pretty_value = fourtyeight & 0xFFFF;
+    else if (!strcmp(a->name, "airflow-temperature-celsius") ||
+        !strcmp(a->name, "temperature-celsius-1") ||
+        !strcmp(a->name, "temperature-celsius-2")) {
+        a->pretty_value = (fourtyeight & 0xFFFF) + 273;
+    } else if (!strcmp(a->name, "power-on-minutes"))
+        a->pretty_value = fourtyeight * 60 * 1000;
+    else if (!strcmp(a->name, "power-on-seconds"))
+        a->pretty_value = fourtyeight * 1000;
+    else if (!strcmp(a->name, "power-on-hours") ||
+             !strcmp(a->name, "loaded-hours") ||
+             !strcmp(a->name, "head-flying-hours"))
+        a->pretty_value = fourtyeight * 60 * 60 * 1000;
+    else
+        a->pretty_value = fourtyeight;
+
+}
+
+static const SkSmartAttributeInfo *lookup_attribute(SkDevice *d, guint8 id, SkSmartAttributeInfo *space) {
+    const SkIdentifyParsedData *ipd;
+
+    /* These are the simple cases */
+    if (attribute_info[id].name)
+        return &attribute_info[id];
+
+    /* These are the complex ones */
+    if (sk_disk_identify_parse(d, &ipd) < 0)
+        return NULL;
+
+    switch (id) {
+        case 9:
+
+            if (strstr(ipd->model, "Maxtor"))
+                space->name = "power-on-minutes";
+            else if (strstr(ipd->model, "Fujitsu") || strstr(ipd->model, "FUJITSU"))
+                space->name = "power-on-seconds";
+            else
+                space->name = "power-on-hours";
+
+            space->unit = SK_SMART_ATTRIBUTE_UNIT_MSECONDS;
+
+            return space;
+    }
+
+    return NULL;
 }
 
 int sk_disk_smart_parse(SkDevice *d, const SkSmartParsedData **spd) {
@@ -584,9 +716,35 @@ int sk_disk_smart_parse(SkDevice *d, const SkSmartParsedData **spd) {
     return 0;
 }
 
+static void find_threshold(SkDevice *d, SkSmartAttribute *a) {
+    guint8 *p;
+    unsigned n;
+
+    if (!d->smart_threshold_data_valid) {
+        a->threshold_valid = FALSE;
+        return;
+    }
+
+    for (n = 0, p = d->smart_threshold_data+2; n < 30; n++, p+=12)
+        if (p[0] == a->id)
+            break;
+
+    if (n >= 30) {
+        a->threshold_valid = FALSE;
+        return;
+    }
+
+    a->threshold = p[1];
+    a->threshold_valid = TRUE;
+
+    a->bad =
+        a->worst_value <= a->threshold ||
+        a->current_value <= a->threshold;
+}
+
 int sk_disk_smart_parse_attributes(SkDevice *d, SkSmartAttributeCallback cb, gpointer userdata) {
     guint8 *p;
-    unsigned n = 0;
+    unsigned n;
 
     if (!d->smart_data_valid) {
         errno = ENOENT;
@@ -595,15 +753,31 @@ int sk_disk_smart_parse_attributes(SkDevice *d, SkSmartAttributeCallback cb, gpo
 
     for (n = 0, p = d->smart_data + 2; n < 30; n++, p+=12) {
         SkSmartAttribute a;
+        SkSmartAttributeInfo space;
+        const SkSmartAttributeInfo *i;
 
         if (p[0] == 0)
             continue;
 
-        g_printerr("attr(%i)\t = %i\t (0x02%x)\n", p[0], p[3], p[3]);
-
+        memset(&a, 0, sizeof(a));
         a.id = p[0];
-        a.name = lookup_attribute_name(d, p[0]);
-        a.value = p[3];
+        a.current_value = p[3];
+        a.worst_value = p[4];
+
+        a.flag = p[2];
+        a.prefailure = !!(p[1] & 1);
+        a.online = !!(p[1] & 2);
+
+        memcpy(a.raw, p+5, 6);
+
+        if ((i = lookup_attribute(d, p[0], &space))) {
+            a.name = i->name;
+            a.pretty_unit = i->unit;
+        }
+
+        make_pretty(&a);
+
+        find_threshold(d, &a);
 
         if (cb)
             cb(d, &a, userdata);
@@ -614,6 +788,98 @@ int sk_disk_smart_parse_attributes(SkDevice *d, SkSmartAttributeCallback cb, gpo
 
 static const char *yes_no(gboolean b) {
     return  b ? "yes" : "no";
+}
+
+const char* sk_smart_attribute_unit_to_string(SkSmartAttributeUnit unit) {
+
+    const char * const map[] = {
+        [SK_SMART_ATTRIBUTE_UNIT_UNKNOWN] = NULL,
+        [SK_SMART_ATTRIBUTE_UNIT_NONE] = "",
+        [SK_SMART_ATTRIBUTE_UNIT_MSECONDS] = "ms",
+        [SK_SMART_ATTRIBUTE_UNIT_SECTORS] = "sectors",
+        [SK_SMART_ATTRIBUTE_UNIT_KELVIN] = "K"
+    };
+
+    if (unit >= _SK_SMART_ATTRIBUTE_UNIT_MAX)
+        return NULL;
+
+    return map[unit];
+}
+
+static char* print_name(char *s, size_t len, guint8 id, const char *k) {
+
+    if (k)
+        g_strlcpy(s, k, len);
+    else
+        g_snprintf(s, len, "%u", id);
+
+    return s;
+
+}
+
+static char *print_value(char *s, size_t len, const SkSmartAttribute *a) {
+
+    switch (a->pretty_unit) {
+        case SK_SMART_ATTRIBUTE_UNIT_MSECONDS:
+
+            if (a->pretty_value >= 1000LLU*60LLU*60LLU*24LLU*365LLU)
+                g_snprintf(s, len, "%0.1f years", ((double) a->pretty_value)/(1000.0*60*60*24*365));
+            else if (a->pretty_value >= 1000LLU*60LLU*60LLU*24LLU*30LLU)
+                g_snprintf(s, len, "%0.1f months", ((double) a->pretty_value)/(1000.0*60*60*24*30));
+            else if (a->pretty_value >= 1000LLU*60LLU*60LLU*24LLU)
+                g_snprintf(s, len, "%0.1f days", ((double) a->pretty_value)/(1000.0*60*60*24));
+            else if (a->pretty_value >= 1000LLU*60LLU*60LLU)
+                g_snprintf(s, len, "%0.1f h", ((double) a->pretty_value)/(1000.0*60*60));
+            else if (a->pretty_value >= 1000LLU*60LLU)
+                g_snprintf(s, len, "%0.1f min", ((double) a->pretty_value)/(1000.0*60));
+            else if (a->pretty_value >= 1000LLU)
+                g_snprintf(s, len, "%0.1f s", ((double) a->pretty_value)/(1000.0));
+            else
+                g_snprintf(s, len, "%llu ms", (unsigned long long) a->pretty_value);
+
+            break;
+
+        case SK_SMART_ATTRIBUTE_UNIT_KELVIN:
+
+            g_snprintf(s, len, "%lli C", (long long) a->pretty_value - 273);
+            break;
+
+        case SK_SMART_ATTRIBUTE_UNIT_SECTORS:
+            g_snprintf(s, len, "%llu sectors", (unsigned long long) a->pretty_value);
+            break;
+
+        case SK_SMART_ATTRIBUTE_UNIT_NONE:
+            g_snprintf(s, len, "%llu", (unsigned long long) a->pretty_value);
+            break;
+
+        case SK_SMART_ATTRIBUTE_UNIT_UNKNOWN:
+            g_snprintf(s, len, "n/a");
+            break;
+
+        case _SK_SMART_ATTRIBUTE_UNIT_MAX:
+            g_assert_not_reached();
+    }
+
+    return s;
+};
+
+static void disk_dump_attributes(SkDevice *d, const SkSmartAttribute *a, gpointer userdata) {
+    char name[32];
+    char pretty[32];
+    char t[32];
+
+    g_snprintf(t, sizeof(t), "%3u", a->threshold);
+
+    g_print("%3u %-27s %3u   %3u   %-3s   %-11s %-7s %-7s %-3s\n",
+            a->id,
+            print_name(name, sizeof(name), a->id, a->name),
+            a->current_value,
+            a->worst_value,
+            a->threshold_valid ? t : "n/a",
+            print_value(pretty, sizeof(pretty), a),
+            a->prefailure ? "prefail" : "old-age",
+            a->online ? "online" : "offline",
+            yes_no(!a->bad));
 }
 
 int sk_disk_dump(SkDevice *d) {
@@ -679,6 +945,19 @@ int sk_disk_dump(SkDevice *d) {
             g_print("Conveyance Self-Test Polling Time: %u min\n",
                     spd->conveyance_test_polling_minutes);
 
+        g_print("%3s %-27s %5s %5s %5s %-11s %-7s %-7s %-3s\n",
+                "ID#",
+                "Name",
+                "Value",
+                "Worst",
+                "Thres",
+                "Pretty",
+                "Type",
+                "Updates",
+                "Good");
+
+        if ((ret = sk_disk_smart_parse_attributes(d, disk_dump_attributes, NULL)) < 0)
+            return ret;
     }
 
     return 0;
@@ -719,10 +998,24 @@ int sk_disk_open(const gchar *name, SkDevice **_d) {
             break;
 
     /* Check if driver can do SMART, and enable if necessary */
-    if (disk_smart_is_available(d))
-        if (!disk_smart_is_enabled(d))
+    if (disk_smart_is_available(d)) {
+
+        if (!disk_smart_is_enabled(d)) {
             if ((ret = disk_smart_enable(d, TRUE)) < 0)
                 goto fail;
+
+            if ((ret = disk_identify_device(d)) < 0)
+                goto fail;
+
+            if (!disk_smart_is_enabled(d)) {
+                errno = EIO;
+                ret = -1;
+                goto fail;
+            }
+        }
+
+        disk_smart_read_thresholds(d);
+    }
 
     *_d = d;
 

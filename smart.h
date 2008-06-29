@@ -41,7 +41,9 @@ typedef struct SkSmartParsedData {
 } SkSmartParsedData;
 
 typedef enum SkSmartAttributeUnit {
-    SK_SMART_ATTRIBUTE_UNIT_SECONDS,
+    SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,
+    SK_SMART_ATTRIBUTE_UNIT_NONE,
+    SK_SMART_ATTRIBUTE_UNIT_MSECONDS,
     SK_SMART_ATTRIBUTE_UNIT_SECTORS,
     SK_SMART_ATTRIBUTE_UNIT_KELVIN,
     _SK_SMART_ATTRIBUTE_UNIT_MAX
@@ -51,15 +53,21 @@ typedef struct SkSmartAttribute {
     /* Static data */
     guint8 id;
     const char *name;
+    SkSmartAttributeUnit pretty_unit; /* for pretty value */
+
     guint8 threshold;
-    SkSmartAttributeUnit unit; /* for pretty_value */
+    gboolean threshold_valid:1;
+
     gboolean online:1;
     gboolean prefailure:1;
 
+    guint8 flag;
+
     /* Volatile data */
-    gboolean over_threshold:1;
-    guint8 value;
-    unsigned pretty_value;
+    gboolean bad:1;
+    guint8 current_value, worst_value;
+    guint64 pretty_value;
+    guint8 raw[6];
 
     /* This structure may be extended at any time without being
      * considered an ABI change. So take care when you copy it. */
@@ -86,5 +94,6 @@ int sk_disk_dump(SkDevice *d);
 void sk_disk_free(SkDevice *d);
 
 const char* sk_offline_data_collection_status_to_string(SkOfflineDataCollectionStatus status);
+const char* sk_smart_attribute_unit_to_string(SkSmartAttributeUnit unit);
 
 #endif
