@@ -46,7 +46,6 @@ typedef enum SkAtaCommand {
     SK_ATA_COMMAND_CHECK_POWER_MODE = 0xE5
 } SkAtaCommand;
 
-
 /* ATA SMART subcommands (ATA8 7.52.1) */
 typedef enum SkSmartCommand {
     SK_SMART_COMMAND_READ_DATA = 0xD0,
@@ -183,7 +182,7 @@ static int sg_io(int fd, int direction,
 static int disk_scsi_command(SkDevice *d, SkAtaCommand command, SkDirection direction, gpointer cmd_data, gpointer data, size_t *len) {
     g_assert(d->type == SK_DEVICE_TYPE_SCSI);
 
-    g_warning("SCSI Disks not yet supported because Lennart doesn't have any to test this with.");
+    g_warning("SCSI disks not yet supported because Lennart doesn't have any to test this with.");
 
     errno = ENOTSUP;
     return -1;
