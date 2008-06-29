@@ -580,17 +580,16 @@ int sk_disk_open(const gchar *name, SkDevice **_d) {
     if ((d->fd = open(name, O_RDWR|O_NOCTTY)) < 0)
         goto fail;
 
-/*     d->type = SK_DEVICE_TYPE_ATA_PASSTHROUGH; */
-/*     if (sk_disk_identify_device(d) < 0) { */
-
-    d->type = SK_DEVICE_TYPE_ATA;
+    d->type = SK_DEVICE_TYPE_ATA_PASSTHROUGH;
     if (sk_disk_identify_device(d) < 0) {
 
-/*             d->type = SK_DEVICE_TYPE_SCSI; */
-/*             if (sk_disk_identify_device(d) < 0) { */
+        d->type = SK_DEVICE_TYPE_ATA;
+        if (sk_disk_identify_device(d) < 0) {
+
+            d->type = SK_DEVICE_TYPE_SCSI;
+            if (sk_disk_identify_device(d) < 0)
                 goto fail;
-/*             } */
-/*         } */
+        }
     }
 
     parse_identify(d->identify, serial, firmware, model);
