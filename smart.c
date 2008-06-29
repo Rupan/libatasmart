@@ -517,19 +517,19 @@ int sk_disk_identify_is_available(SkDevice *d, gboolean *b) {
     return 0;
 }
 
-const char *sk_offline_data_collection_status_to_string(SkOfflineDataCollectionStatus status) {
+const char *sk_smart_offline_data_collection_status_to_string(SkSmartOfflineDataCollectionStatus status) {
 
     static const char* const map[] = {
-        [SK_OFFLINE_DATA_COLLECTION_STATUS_NEVER] = "Off-line data collection activity was never started.",
-        [SK_OFFLINE_DATA_COLLECTION_STATUS_SUCCESS] = "Off-line data collection activity was completed without error.",
-        [SK_OFFLINE_DATA_COLLECTION_STATUS_INPROGRESS] = "Off-line activity in progress.",
-        [SK_OFFLINE_DATA_COLLECTION_STATUS_SUSPENDED] = "Off-line data collection activity was suspended by an interrupting command from host.",
-        [SK_OFFLINE_DATA_COLLECTION_STATUS_ABORTED] = "Off-line data collection activity was aborted by an interrupting command from host.",
-        [SK_OFFLINE_DATA_COLLECTION_STATUS_FATAL] = "Off-line data collection activity was aborted by the device with a fatal error.",
-        [SK_OFFLINE_DATA_COLLECTION_STATUS_UNKNOWN] = "Unknown status"
+        [SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_NEVER] = "Off-line data collection activity was never started.",
+        [SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_SUCCESS] = "Off-line data collection activity was completed without error.",
+        [SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_INPROGRESS] = "Off-line activity in progress.",
+        [SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_SUSPENDED] = "Off-line data collection activity was suspended by an interrupting command from host.",
+        [SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_ABORTED] = "Off-line data collection activity was aborted by an interrupting command from host.",
+        [SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_FATAL] = "Off-line data collection activity was aborted by the device with a fatal error.",
+        [SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_UNKNOWN] = "Unknown status"
     };
 
-    if (status >= _SK_OFFLINE_DATA_COLLECTION_STATUS_MAX)
+    if (status >= _SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_MAX)
         return NULL;
 
     return map[status];
@@ -666,35 +666,35 @@ int sk_disk_smart_parse(SkDevice *d, const SkSmartParsedData **spd) {
     switch (d->smart_data[362]) {
         case 0x00:
         case 0x80:
-            d->smart_parsed_data.offline_data_collection_status = SK_OFFLINE_DATA_COLLECTION_STATUS_NEVER;
+            d->smart_parsed_data.offline_data_collection_status = SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_NEVER;
             break;
 
         case 0x02:
         case 0x82:
-            d->smart_parsed_data.offline_data_collection_status = SK_OFFLINE_DATA_COLLECTION_STATUS_SUCCESS;
+            d->smart_parsed_data.offline_data_collection_status = SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_SUCCESS;
             break;
 
         case 0x03:
-            d->smart_parsed_data.offline_data_collection_status = SK_OFFLINE_DATA_COLLECTION_STATUS_INPROGRESS;
+            d->smart_parsed_data.offline_data_collection_status = SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_INPROGRESS;
             break;
 
         case 0x04:
         case 0x84:
-            d->smart_parsed_data.offline_data_collection_status = SK_OFFLINE_DATA_COLLECTION_STATUS_SUSPENDED;
+            d->smart_parsed_data.offline_data_collection_status = SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_SUSPENDED;
             break;
 
         case 0x05:
         case 0x85:
-            d->smart_parsed_data.offline_data_collection_status = SK_OFFLINE_DATA_COLLECTION_STATUS_ABORTED;
+            d->smart_parsed_data.offline_data_collection_status = SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_ABORTED;
             break;
 
         case 0x06:
         case 0x86:
-            d->smart_parsed_data.offline_data_collection_status = SK_OFFLINE_DATA_COLLECTION_STATUS_FATAL;
+            d->smart_parsed_data.offline_data_collection_status = SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_FATAL;
             break;
 
         default:
-            d->smart_parsed_data.offline_data_collection_status = SK_OFFLINE_DATA_COLLECTION_STATUS_UNKNOWN;
+            d->smart_parsed_data.offline_data_collection_status = SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_UNKNOWN;
             break;
     }
 
@@ -927,7 +927,7 @@ int sk_disk_dump(SkDevice *d) {
                 "Short/Extended Self-Test Available: %s\n"
                 "Start Self-Test Available: %s\n"
                 "Abort Self-Test Available: %s\n",
-                sk_offline_data_collection_status_to_string(spd->offline_data_collection_status),
+                sk_smart_offline_data_collection_status_to_string(spd->offline_data_collection_status),
                 spd->selftest_execution_percent_remaining,
                 spd->total_offline_data_collection_seconds,
                 yes_no(spd->conveyance_test_available),

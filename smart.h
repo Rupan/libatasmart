@@ -11,19 +11,19 @@ typedef struct SkIdentifyParsedData {
     gchar model[41];
 } SkIdentifyParsedData;
 
-typedef enum SkOfflineDataCollectionStatus {
-    SK_OFFLINE_DATA_COLLECTION_STATUS_NEVER,
-    SK_OFFLINE_DATA_COLLECTION_STATUS_SUCCESS,
-    SK_OFFLINE_DATA_COLLECTION_STATUS_INPROGRESS,
-    SK_OFFLINE_DATA_COLLECTION_STATUS_SUSPENDED,
-    SK_OFFLINE_DATA_COLLECTION_STATUS_ABORTED,
-    SK_OFFLINE_DATA_COLLECTION_STATUS_FATAL,
-    SK_OFFLINE_DATA_COLLECTION_STATUS_UNKNOWN,
-    _SK_OFFLINE_DATA_COLLECTION_STATUS_MAX
-} SkOfflineDataCollectionStatus;
+typedef enum SkSmartOfflineDataCollectionStatus {
+    SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_NEVER,
+    SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_SUCCESS,
+    SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_INPROGRESS,
+    SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_SUSPENDED,
+    SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_ABORTED,
+    SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_FATAL,
+    SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_UNKNOWN,
+    _SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_MAX
+} SkSmartOfflineDataCollectionStatus;
 
 typedef struct SkSmartParsedData {
-    SkOfflineDataCollectionStatus offline_data_collection_status;
+    SkSmartOfflineDataCollectionStatus offline_data_collection_status;
     unsigned selftest_execution_percent_remaining;
     unsigned total_offline_data_collection_seconds;
 
@@ -93,7 +93,7 @@ int sk_disk_dump(SkDevice *d);
 
 void sk_disk_free(SkDevice *d);
 
-const char* sk_offline_data_collection_status_to_string(SkOfflineDataCollectionStatus status);
+const char* sk_smart_offline_data_collection_status_to_string(SkSmartOfflineDataCollectionStatus status);
 const char* sk_smart_attribute_unit_to_string(SkSmartAttributeUnit unit);
 
 #endif
