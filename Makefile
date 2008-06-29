@@ -3,3 +3,6 @@ LIBS=`pkg-config --libs glib-2.0`
 
 skdump: smart.o skdump.o
 	$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
+
+clean:
+	rm -f skdump *.o
