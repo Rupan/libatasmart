@@ -33,11 +33,17 @@ public class DiskHealth : Gtk.Builder {
                         add_from_file (uifile);
                         Gtk.Widget window = (Gtk.Widget) get_object("DiskHealthDialog");
 
-                        if (!fill_in_data(disk_string))
+                        if (!setup_connection(disk_string))
+                                return false;
+
+                        if (!fill_in_data())
                                 return false;
 
                         window.show_all();
                         window.destroy += Gtk.main_quit;
+
+                        ((Gtk.Button) get_object("closeButton")).clicked += Gtk.main_quit;
+
                 } catch (GLib.Error e) {
                         stderr.printf("Failed to create main window: %s\n", e.message);
                         return false;
@@ -51,8 +57,7 @@ public class DiskHealth : Gtk.Builder {
         private DBus.ObjectPath dbus_path;
         private dynamic DBus.Object disk;
 
-        public bool fill_in_data(string disk_string) {
-
+        public bool setup_connection(string disk_string) {
                 try {
                         connection = DBus.Bus.get(DBus.BusType.SYSTEM);
 
@@ -73,7 +78,17 @@ public class DiskHealth : Gtk.Builder {
                         stderr.printf("Using D-Bus path %s\n", p);
 
                         disk = connection.get_object("net.poettering.SmartKit", p, "net.poettering.SmartKit.Disk");
+                } catch (DBus.Error e) {
+                        stderr.printf("D-Bus error: %s\n", e.message);
+                        return false;
+                }
 
+                return true;
+        }
+
+        public bool fill_in_data() {
+
+                try {
                         ((Gtk.Label) get_object("pathLabel")).set_label(disk.getPath());
                         ((Gtk.Label) get_object("sizeLabel")).set_label(pretty_size(disk.getSize()));
 
@@ -92,19 +107,124 @@ public class DiskHealth : Gtk.Builder {
                         if (b)
                                 b = disk.isSmartAvailable();
 
-                        if (b) {
-                                ((Gtk.Label) get_object("smartLabel")).set_label("Disk health functionality (S.M.A.R.T.) is available.");
-                        } else {
-                                ((Gtk.Label) get_object("smartLabel")).set_markup("Disk health functionality (S.M.A.R.T.) is <b>not</b> available.");
-                                ((Gtk.Label) get_object("healthLabel")).set_label("");
-                                ((Gtk.Label) get_object("badSectorsLabel")).set_label("");
-                                ((Gtk.Label) get_object("temperatureLabel")).set_label("");
-                        }
+                        if (b)
+                                return fill_in_smart_data();
+                        else
+                                return fill_in_no_smart_data();
 
                 } catch (DBus.Error e) {
                         stderr.printf("D-Bus error: %s\n", e.message);
                         return false;
                 }
+        }
+
+        public bool fill_in_no_smart_data() {
+
+                ((Gtk.Label) get_object("smartLabel")).set_markup("Disk health functionality (S.M.A.R.T.) is <b>not</b> available.");
+                ((Gtk.Label) get_object("healthLabel")).set_label("");
+                ((Gtk.Label) get_object("badSectorsLabel")).set_label("");
+                ((Gtk.Label) get_object("temperatureLabel")).set_label("");
+
+                return fill_in_no_self_test_data();
+        }
+
+        public bool fill_in_smart_data() {
+                try {
+
+                        ((Gtk.Label) get_object("smartLabel")).set_label("Disk health functionality (S.M.A.R.T.) is available.");
+
+                        bool b = disk.checkSmartStatus();
+
+                        if (b)
+                                ((Gtk.Label) get_object("healthLabel")).set_label("Disk reports to be healthy.");
+                        else
+                                ((Gtk.Label) get_object("healthLabel")).set_label("Disk reports that it has already failed or is expected to fail in the next 24h.");
+
+                        bool a = disk.getStartTestAvailable();
+                        b = disk.getConveyanceTestAvailable();
+                        bool c = disk.getShortAndExtendedTestAvailable();
+
+                        if (a && (b || c))
+                                return fill_in_self_test_data();
+                        else
+                                return fill_in_no_self_test_data();
+
+                } catch (DBus.Error e) {
+                        stderr.printf("D-Bus error: %s\n", e.message);
+                        return false;
+                }
+        }
+
+        public bool fill_in_self_test_data() {
+                try {
+                        bool show_percent = false;
+                        string text;
+
+                        string state = disk.getSelfTestExecutionStatus();
+
+                        switch (state) {
+                                case "success-or-never":
+                                        text = "The previous self-test completed without error or no self-test has ever been run.";
+                                        break;
+                                case "aborted":
+                                        text = "The previous self-test was aborted by the user.";
+                                        break;
+                                case "interrupted":
+                                        text = "The previous self-test was interrupted by the host with a hardware or software reset.";
+                                        break;
+                                case "fatal":
+                                        text = "A fatal error or unknown test error occurred while the device was executing the previous self-test and the device was unable to complete the self-test.";
+                                        break;
+                                case "error-unknown":
+                                        text = "The previous self-test completed having a test element that failed.";
+                                        break;
+                                case "error-electrical":
+                                        text = "The previous self-test completed having the electrical element of the test failed.";
+                                        break;
+                                case "eror-servo":
+                                        text = "The previous self-test completed having the servo (and/or seek) test element of the test failed.";
+                                        break;
+                                case "error-read":
+                                        text = "The previous self-test completed having the read element of the test failed.";
+                                        break;
+                                case "error-handling":
+                                        text = "The previous self-test completed having a test element that failed and the device is suspected of having handling damage.";
+                                        break;
+                                case "inprogress":
+                                        text = "Self-test in progres...";
+                                        show_percent = true;
+                                        break;
+
+                                default:
+                                        text = "Unknown state";
+                                        break;
+                        }
+
+
+                        ((Gtk.Label) get_object("selfTestLabel")).set_label(text);
+
+                        if (show_percent) {
+                                uint percent = disk.getSelfTestExecutionPercentRemaining();
+
+                                ((Gtk.ProgressBar) get_object("selfTestProgressBar")).set_fraction((double) (100-percent)/100);
+                                ((Gtk.ProgressBar) get_object("selfTestProgressBar")).set_text("%u%% remaining".printf(percent));
+                        } else
+                                ((Gtk.ProgressBar) get_object("selfTestProgressBar")).set_text("n/a");
+
+                        ((Gtk.ProgressBar) get_object("selfTestProgressBar")).set_sensitive(show_percent);
+
+                } catch (DBus.Error e) {
+                        stderr.printf("D-Bus error: %s\n", e.message);
+                        return false;
+                }
+
+                return true;
+        }
+
+        public bool fill_in_no_self_test_data() {
+                ((Gtk.Label) get_object("selfTestLabel")).set_label("Self-test functionality is not available.");
+                ((Gtk.Button) get_object("selfTestButton")).set_sensitive(false);
+                ((Gtk.ProgressBar) get_object("selfTestProgressBar")).set_sensitive(false);
 
                 return true;
         }
