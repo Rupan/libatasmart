@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
         SkSmartSelfTest test;
 
         if (argc < 3) {
-            g_printerr("%s [DEVICE] [short|extended|conveyance]\n", argv[0]);
+            g_printerr("%s [DEVICE] [short|extended|conveyance|abort]\n", argv[0]);
             return 1;
         }
 
@@ -44,6 +44,8 @@ int main(int argc, char *argv[]) {
             test = SK_SMART_SELF_TEST_EXTENDED;
         else if (!(g_strcasecmp(argv[2], sk_smart_self_test_to_string(SK_SMART_SELF_TEST_CONVEYANCE))))
             test = SK_SMART_SELF_TEST_CONVEYANCE;
+        else if (!(g_strcasecmp(argv[2], sk_smart_self_test_to_string(SK_SMART_SELF_TEST_ABORT))))
+            test = SK_SMART_SELF_TEST_ABORT;
         else {
             g_printerr("Unknown test '%s'.\n", argv[2]);
             return 1;
