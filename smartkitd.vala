@@ -286,7 +286,7 @@ public class Disk : GLib.Object, DiskAPI {
 
                 switch (d->self_test_execution_status) {
                         case SmartSelfTestExecutionStatus.SUCCESS_OR_NEVER:
-                                return "sucess-or-never";
+                                return "success-or-never";
                         case SmartSelfTestExecutionStatus.ABORTED:
                                 return "aborted";
                         case SmartSelfTestExecutionStatus.INTERRUPTED:
