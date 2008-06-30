@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
         SkDisk *d;
 
         if (argc != 2) {
-                g_printerr("%s [DEVICE]", argv[0]);
+                g_printerr("%s [DEVICE]\n", argv[0]);
                 return 1;
         }
 
