@@ -1,2 +1,10 @@
 skdump
+sktest
+gnome-disk-health
+gnome-disk-health.c
+gnome-disk-health.h
+gnome-disk-health.ui
+smartkitd
+smartkitd.c
+smartkitd.h
 *.o

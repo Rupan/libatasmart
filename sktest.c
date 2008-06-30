@@ -29,22 +29,35 @@ int main(int argc, char *argv[]) {
         int ret;
         const char *device;
         SkDisk *d;
+        SkSmartSelfTest test;
 
-        if (argc != 2) {
-                g_printerr("%s [DEVICE]", argv[0]);
-                return 1;
+        if (argc < 3) {
+            g_printerr("%s [DEVICE] [short|extended|conveyance]\n", argv[0]);
+            return 1;
         }
 
         device = argv[1];
+
+        if (!g_strcasecmp(argv[2], sk_smart_self_test_to_string(SK_SMART_SELF_TEST_SHORT)))
+            test = SK_SMART_SELF_TEST_SHORT;
+        else if (!g_strcasecmp(argv[2], sk_smart_self_test_to_string(SK_SMART_SELF_TEST_EXTENDED)))
+            test = SK_SMART_SELF_TEST_EXTENDED;
+        else if (!(g_strcasecmp(argv[2], sk_smart_self_test_to_string(SK_SMART_SELF_TEST_CONVEYANCE))))
+            test = SK_SMART_SELF_TEST_CONVEYANCE;
+        else {
+            g_printerr("Unknown test '%s'.\n", argv[2]);
+            return 1;
+        }
 
         if ((ret = sk_disk_open(device, &d)) < 0) {
                 g_printerr("Failed to open disk %s: %s\n", device, g_strerror(errno));
                 return 1;
         }
 
-        if ((ret = sk_disk_dump(d)) < 0) {
-                g_printerr("Failed to dump disk data: %s\n", g_strerror(errno));
+        if ((ret = sk_disk_smart_self_test(d, test)) < 0) {
+                g_printerr("Failed to start sel-test: %s\n", g_strerror(errno));
                 return 1;
+
         }
 
         sk_disk_free(d);
