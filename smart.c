@@ -275,7 +275,7 @@ static int disk_passthrough_command(SkDisk *d, SkAtaCommand command, SkDirection
         cdb[6] = bytes[3];
 
         cdb[8] = bytes[9]; /* LBA LOW */
-        cdb[10] = bytes[8]; /* LBA MED */
+        cdb[10] = bytes[8]; /* LBA MID */
         cdb[12] = bytes[7]; /* LBA HIGH */
 
         cdb[13] = bytes[10] & 0x4F; /* SELECT */
@@ -296,7 +296,7 @@ static int disk_passthrough_command(SkDisk *d, SkAtaCommand command, SkDirection
         bytes[3] = desc[5];
         bytes[9] = desc[7];
         bytes[8] = desc[9];
-        bytes[7] = desc[10];
+        bytes[7] = desc[11];
         bytes[10] = desc[12];
         bytes[11] = desc[13];
 
@@ -436,20 +436,38 @@ static int disk_smart_read_thresholds(SkDisk *d) {
         return ret;
 }
 
-/* int disk_smart_status(SkDisk *d, SmartLogAddress a, gboolean *b) { */
-/*     guint16 cmd[6]; */
+int sk_disk_smart_status(SkDisk *d, gboolean *good) {
+        guint16 cmd[6];
+        int ret;
 
-/*     guint8 data[16]; */
+        if (!disk_smart_is_available(d)) {
+                errno = ENOTSUP;
+                return -1;
+        }
 
-/*     cmd[0] = GUINT16_TO_BE(SMART_RETURN_STATUS); */
-/*     cmd[1] = GUINT16_TO_BE(0x0000U); */
-/*     cmd[3] = GUINT16_TO_BE(0x00C2U); */
-/*     cmd[4] = GUINT16_TO_BE(0x4F00U | (guint16) a); */
+        memset(cmd, 0, sizeof(cmd));
 
-/*     ret = disk_command(SK_ATA_SMART, cmd, sizeof(cmd), NULL, 0); */
+        cmd[0] = GUINT16_TO_BE(SK_SMART_COMMAND_RETURN_STATUS);
+        cmd[1] = GUINT16_TO_BE(0x0000U);
+        cmd[3] = GUINT16_TO_BE(0x00C2U);
+        cmd[4] = GUINT16_TO_BE(0x4F00U);
 
-/*     return ret; */
-/* } */
+        if ((ret = disk_command(d, SK_ATA_COMMAND_SMART, SK_DIRECTION_NONE, cmd, NULL, 0)) < 0)
+                return ret;
+
+        if (cmd[3] == GUINT16_TO_BE(0x00C2U) &&
+            cmd[4] == GUINT16_TO_BE(0x4F00U))
+                *good = TRUE;
+        else if (cmd[3] == GUINT16_TO_BE(0x002CU) &&
+            cmd[4] == GUINT16_TO_BE(0xF400U))
+                *good = FALSE;
+        else {
+                errno = EIO;
+                return -1;
+        }
+
+        return ret;
+}
 
 int sk_disk_smart_self_test(SkDisk *d, SkSmartSelfTest test) {
         guint16 cmd[6];
@@ -885,9 +903,9 @@ static void find_threshold(SkDisk *d, SkSmartAttributeParsedData *a) {
         a->threshold = p[1];
         a->threshold_valid = TRUE;
 
-        a->bad =
-                a->worst_value <= a->threshold ||
-                a->current_value <= a->threshold;
+        a->good =
+                a->worst_value > a->threshold &&
+                a->current_value > a->threshold;
 }
 
 int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, gpointer userdata) {
@@ -1025,7 +1043,7 @@ static void disk_dump_attributes(SkDisk *d, const SkSmartAttributeParsedData *a,
 
         g_snprintf(t, sizeof(t), "%3u", a->threshold);
 
-        if (a->bad  && isatty(1))
+        if (!a->good  && isatty(1))
                 fprintf(stderr, HIGHLIGHT);
 
         g_print("%3u %-27s %3u   %3u   %-3s   %-11s %-7s %-7s %-3s\n",
@@ -1037,9 +1055,9 @@ static void disk_dump_attributes(SkDisk *d, const SkSmartAttributeParsedData *a,
                 print_value(pretty, sizeof(pretty), a),
                 a->prefailure ? "prefail" : "old-age",
                 a->online ? "online" : "offline",
-                yes_no(!a->bad));
+                yes_no(a->good));
 
-        if (a->bad && isatty(1))
+        if (!a->good && isatty(1))
                 fprintf(stderr, ENDHIGHLIGHT);
 }
 
@@ -1074,6 +1092,13 @@ int sk_disk_dump(SkDisk *d) {
 
         if (disk_smart_is_available(d)) {
                 const SkSmartParsedData *spd;
+                gboolean good;
+
+                if ((ret = sk_disk_smart_status(d, &good)) < 0)
+                        return ret;
+
+                g_print("Disk Health Good: %s\n",
+                        yes_no(good));
 
                 if ((ret = sk_disk_smart_read_data(d)) < 0)
                         return ret;

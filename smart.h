@@ -123,7 +123,7 @@ typedef struct SkSmartAttributeParsedData {
         gboolean prefailure:1;
 
         /* Volatile data */
-        gboolean bad:1;
+        gboolean good:1;
         guint8 current_value, worst_value;
         guint64 pretty_value;
         guint8 raw[6];
@@ -136,35 +136,28 @@ typedef struct SkDisk SkDisk;
 
 int sk_disk_open(const gchar *name, SkDisk **d);
 
+int sk_disk_get_size(SkDisk *d, guint64 *bytes);
+
 int sk_disk_check_sleep_mode(SkDisk *d, gboolean *awake);
 
 int sk_disk_identify_is_available(SkDisk *d, gboolean *b);
 int sk_disk_identify_parse(SkDisk *d, const SkIdentifyParsedData **data);
 
-int sk_disk_smart_is_available(SkDisk *d, gboolean *b);
+typedef void (*SkSmartAttributeParseCallback)(SkDisk *d, const SkSmartAttributeParsedData *a, gpointer userdata);
 
+int sk_disk_smart_is_available(SkDisk *d, gboolean *b);
+int sk_disk_smart_status(SkDisk *d, gboolean *good);
 /* Reading SMART data might cause the disk to wake up from
  * sleep. Hence from monitoring daemons make sure to call
  * sk_disk_check_power_mode() to check wether the disk is sleeping and
  * skip the read if so. */
 int sk_disk_smart_read_data(SkDisk *d);
-
 int sk_disk_smart_parse(SkDisk *d, const SkSmartParsedData **data);
-
-typedef void (*SkSmartAttributeParseCallback)(SkDisk *d, const SkSmartAttributeParsedData *a, gpointer userdata);
 int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, gpointer userdata);
-
-int sk_disk_get_size(SkDisk *d, guint64 *bytes);
-
 int sk_disk_smart_self_test(SkDisk *d, SkSmartSelfTest test);
 
 int sk_disk_dump(SkDisk *d);
 
 void sk_disk_free(SkDisk *d);
-
-/* TODO:
- *
- * Smart status
- */
 
 #endif
