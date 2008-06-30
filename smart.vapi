@@ -79,7 +79,7 @@ namespace Smart {
                 public uint self_test_polling_minutes(SmartSelfTest test);
         }
 
-        [CCode (cname="SkSmartAttributeUnit", cprefix="CK_SMART_ATTRIBUTE_UNIT")]
+        [CCode (cname="SkSmartAttributeUnit", cprefix="SK_SMART_ATTRIBUTE_UNIT_")]
         public enum SmartAttributeUnit {
                 UNKNOWN, NONE, MSECONDS, SECTORS, KELVIN
         }
@@ -88,8 +88,8 @@ namespace Smart {
         public weak string smart_attribute_unit_to_string(SmartAttributeUnit unit);
 
         [Immutable]
-        [CCode (cname="SkSmartAttribute")]
-        public struct SmartAttribute {
+        [CCode (cname="SkSmartAttributeParsedData")]
+        public struct SmartAttributeParsedData {
                 public uint8 id;
                 public char *name;
                 public SmartAttributeUnit pretty_unit;
@@ -98,16 +98,20 @@ namespace Smart {
                 public bool threshold_valid;
                 public bool online;
                 public bool prefailure;
-                public bool bad;
+                public bool good;
                 public uint8 current_value;
                 public uint8 worst_value;
                 public uint64 pretty_value;
                 public uint8[6] raw;
         }
 
+        [CCode (cname="SkSmartAttributeParseCallback")]
+        public delegate void SmartAttributeParseCallback(void* disk, SmartAttributeParsedData a);
+
         [Compact]
         [CCode (free_function="sk_disk_free", cname="SkDisk", cprefix="sk_disk_")]
         public class Disk {
+
                 public static int open(string name, out Disk disk);
 
                 public int get_size(out uint64 bytes);
@@ -117,11 +121,10 @@ namespace Smart {
                 public int identify_is_available(out bool available);
                 public int identify_parse(out weak IdentifyParsedData* data);
 
-                public delegate void SmartAttributeCallback(Disk d, SmartAttribute a, void* userdata);
                 public int smart_is_available(out bool available);
                 public int smart_status(out bool good);
                 public int smart_read_data();
-                public int smart_parse_attributes(SmartAttributeCallback cb, void* userdata);
+                public int smart_parse_attributes(SmartAttributeParseCallback cb);
                 public int smart_parse(out weak SmartParsedData* data);
                 public int smart_self_test(SmartSelfTest test);
 
