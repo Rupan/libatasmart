@@ -108,24 +108,22 @@ namespace Smart {
         [Compact]
         [CCode (free_function="sk_disk_free", cname="SkDisk", cprefix="sk_disk_")]
         public class Disk {
-
-                public delegate void SmartAttributeCallback(Disk d, SmartAttribute a, void* userdata);
-
                 public static int open(string name, out Disk disk);
-
-                public int check_sleep_mode(out bool awake);
-
-                public int identify_is_available(out bool mode);
-                public int identify_parse(out weak IdentifyParsedData* data);
-
-                public int smart_is_available(out bool mode);
-                public int smart_read_data();
-                public int smart_parse_attributes(SmartAttributeCallback cb, void* userdata);
-                public int smart_parse(out weak SmartParsedData* data);
 
                 public int get_size(out uint64 bytes);
 
-                public int self_test(SmartSelfTest test);
+                public int check_sleep_mode(out bool awake);
+
+                public int identify_is_available(out bool available);
+                public int identify_parse(out weak IdentifyParsedData* data);
+
+                public delegate void SmartAttributeCallback(Disk d, SmartAttribute a, void* userdata);
+                public int smart_is_available(out bool available);
+                public int smart_status(out bool good);
+                public int smart_read_data();
+                public int smart_parse_attributes(SmartAttributeCallback cb, void* userdata);
+                public int smart_parse(out weak SmartParsedData* data);
+                public int smart_self_test(SmartSelfTest test);
 
                 public int dump();
         }
