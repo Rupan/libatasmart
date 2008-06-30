@@ -247,6 +247,11 @@ public class DiskHealth : Gtk.Builder {
         public static int main (string[] args) {
                 Gtk.init(ref args);
 
+                if (args.length != 2) {
+                        stderr.printf("Please specify device to check health for.\n");
+                        return 1;
+                }
+
                 var dh  = new DiskHealth();
 
                 if (dh.create_widgets(args[1]))
