@@ -140,12 +140,12 @@ int sk_disk_get_size(SkDisk *d, guint64 *bytes);
 
 int sk_disk_check_sleep_mode(SkDisk *d, gboolean *awake);
 
-int sk_disk_identify_is_available(SkDisk *d, gboolean *b);
+int sk_disk_identify_is_available(SkDisk *d, gboolean *available);
 int sk_disk_identify_parse(SkDisk *d, const SkIdentifyParsedData **data);
 
 typedef void (*SkSmartAttributeParseCallback)(SkDisk *d, const SkSmartAttributeParsedData *a, gpointer userdata);
 
-int sk_disk_smart_is_available(SkDisk *d, gboolean *b);
+int sk_disk_smart_is_available(SkDisk *d, gboolean *available);
 int sk_disk_smart_status(SkDisk *d, gboolean *good);
 /* Reading SMART data might cause the disk to wake up from
  * sleep. Hence from monitoring daemons make sure to call
