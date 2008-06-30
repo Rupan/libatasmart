@@ -29,15 +29,23 @@ errordomain Error {
         SYSTEM,
         NOT_FOUND,
         SLEEPING,
-        UNKNOWN_TEST
+        UNKNOWN_TEST,
+        UNKNOWN_THRESHOLD,
+        UNKNOWN_UNIT
 }
 
-[DBus (name = "net.poettering.SmartKit.Manager")]
-public interface ManagerAPI {
-        public abstract DBus.ObjectPath getDiskByUDI(string udi) throws Error;
-        public abstract DBus.ObjectPath getDiskByPath(string path) throws Error;
-
-        /* public abstract DBus.ObjectPath[] getDisks() throws Error; */
+[DBus (name = "net.poettering.SmartKit.Attribute")]
+public interface AttributeAPI {
+        public abstract uint8 getId() throws Error;
+        public abstract string getName() throws Error;
+        public abstract string getPrettyUnit() throws Error;
+        public abstract uint8 getThreshold() throws Error;
+        public abstract bool isOnline() throws Error;
+        public abstract bool isPrefailure() throws Error;
+        public abstract bool isGood() throws Error;
+        public abstract uint8 getCurrentValue() throws Error;
+        public abstract uint8 getWorstValue() throws Error;
+        public abstract uint64 getPrettyValue() throws Error;
 }
 
 [DBus (name = "net.poettering.SmartKit.Disk")]
@@ -78,13 +86,135 @@ public interface DiskAPI {
         public abstract uint getConveyanceTestPollingMinutes() throws Error;
 }
 
+[DBus (name = "net.poettering.SmartKit.Manager")]
+public interface ManagerAPI {
+        public abstract DBus.ObjectPath getDiskByUDI(string udi) throws Error;
+        public abstract DBus.ObjectPath getDiskByPath(string path) throws Error;
+}
+
+string clean_path(string s) {
+        var builder = new StringBuilder ();
+        string t;
+
+        for (int i = 0; i < s.size(); i++)
+                if (s[i].isalnum() || s[i] == '_')
+                        builder.append_unichar(s[i]);
+                else
+                        builder.append_unichar('_');
+
+        return builder.str;
+}
+
+
+public class Attribute : GLib.Object, AttributeAPI {
+        public string dbus_path;
+
+        public Disk disk { get; construct; }
+        public DBus.Connection connection { get; construct; }
+
+        public uint8 id;
+        public string name;
+        public SmartAttributeUnit pretty_unit;
+        public uint8 threshold;
+        public bool threshold_valid;
+        public bool online;
+        public bool prefailure;
+        public bool good;
+        public uint8 current_value;
+        public uint8 worst_value;
+        public uint64 pretty_value;
+
+        Attribute(Disk disk, DBus.Connection connection) {
+                this.connection = connection;
+                this.disk = disk;
+        }
+
+        public void set(SmartAttributeParsedData a) {
+                id = a.id;
+                name = "%s".printf(a.name);
+                pretty_unit = a.pretty_unit;
+                threshold = a.threshold;
+                threshold_valid = a.threshold_valid;
+                online = a.online;
+                prefailure = a.prefailure;
+                good = a.good;
+                current_value = a.current_value;
+                worst_value = a.worst_value;
+                pretty_value = a.pretty_value;
+        }
+
+        public void install() {
+                this.dbus_path = "%s/%s".printf(disk.dbus_path, clean_path(name));
+
+                stderr.printf("Registering D-Bus path %s\n", this.dbus_path);
+                this.connection.register_object(this.dbus_path, this);
+        }
+
+        public uint8 getId() throws Error {
+                return id;
+        }
+
+        public string getName() throws Error {
+                return name;
+        }
+
+        public string getPrettyUnit() throws Error {
+                switch (pretty_unit) {
+
+                        case SmartAttributeUnit.UNKNOWN:
+                                return "unknown";
+                        case SmartAttributeUnit.NONE:
+                                return "none";
+                        case SmartAttributeUnit.MSECONDS:
+                                return "mseconds";
+                        case SmartAttributeUnit.KELVIN:
+                                return "kelvin";
+                        default:
+                                throw new Error.UNKNOWN_UNIT("Unit unknown.");
+                }
+        }
+
+        public uint8 getThreshold() throws Error {
+                if (!threshold_valid)
+                        throw new Error.UNKNOWN_THRESHOLD("Threshold unknown.");
+
+                return threshold;
+        }
+
+        public bool isOnline() throws Error {
+                return online;
+        }
+
+        public bool isPrefailure() throws Error {
+                return prefailure;
+        }
+
+        public bool isGood() throws Error {
+                return good;
+        }
+
+        public uint8 getCurrentValue() throws Error {
+                return current_value;
+        }
+
+        public uint8 getWorstValue() throws Error {
+                return worst_value;
+        }
+
+        public uint64 getPrettyValue() throws Error {
+                return pretty_value;
+        }
+}
+
 public class Disk : GLib.Object, DiskAPI {
-        private Smart.Disk disk;
+        public Smart.Disk disk;
         public string dbus_path;
 
         public string path { get; construct; }
         public string udi { get; construct; }
         public DBus.Connection connection { get; construct; }
+
+        public List<Attribute> attributes;
 
         Disk(DBus.Connection connection, string path, string udi) {
                 this.connection = connection;
@@ -92,20 +222,8 @@ public class Disk : GLib.Object, DiskAPI {
                 this.udi = udi;
         }
 
-        private string clean_path(string s) {
-                var builder = new StringBuilder ();
-                string t;
-
-                for (int i = 0; i < s.size(); i++)
-                        if (s[i].isalnum() || s[i] == '_')
-                                builder.append_unichar(s[i]);
-                        else
-                                builder.append_unichar('_');
-
-                return builder.str;
-        }
-
         public void open() throws Error {
+
                 if (Smart.Disk.open(this.path, out this.disk) < 0)
                         throw new Error.SYSTEM("open() failed");
 
@@ -120,6 +238,21 @@ public class Disk : GLib.Object, DiskAPI {
                 this.connection.register_object(this.dbus_path, this);
 
                 this.disk.smart_read_data();
+
+                populate_attributes();
+        }
+
+        private void attribute_callback(void* disk, SmartAttributeParsedData a) {
+                Attribute attr;
+
+                attr = new Attribute(this, this.connection);
+                attr.set(a);
+                attr.install();
+                attributes.append(#attr);
+        }
+
+        public void populate_attributes() {
+                this.disk.smart_parse_attributes(attribute_callback);
         }
 
         public string getPath() throws Error {
@@ -446,17 +579,6 @@ public class Manager : GLib.Object, ManagerAPI {
 
                 throw new Error.NOT_FOUND("Device not found");
         }
-
-/*     public DBus.ObjectPath[] getDisks() throws Error { */
-/*         DBus.ObjectPath[] o = new DBus.ObjectPath[this.disks.length()]; */
-
-/*         int i = 0; */
-/*         foreach (Disk d in this.disks) */
-/*             o[i++] = new DBus.ObjectPath(d.dbus_path); */
-
-/*         return o; */
-/*     } */
-
 }
 
 int main() {
