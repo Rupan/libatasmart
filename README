@@ -7,7 +7,6 @@ GITWEB:
 	http://git.0pointer.de/?p=libatasmart.git
 
 NOTES:
-
         As the name suggests libatasmart only does ATA S.M.A.R.T.,
         there is no support for SCSI harddisks. SCSI S.M.A.R.T. is a
         very different system, support for it should be implemented in
