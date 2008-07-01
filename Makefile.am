@@ -25,6 +25,9 @@ noinst_DATA =
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libatasmart.pc
 
+include_HEADERS = \
+	atasmart.h
+
 bin_PROGRAMS = \
 	skdump \
 	sktest
