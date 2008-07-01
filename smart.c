@@ -1176,12 +1176,12 @@ int sk_disk_open(const char *name, SkDisk **_d) {
 
         if (!(d = calloc(1, sizeof(SkDisk)))) {
                 errno = ENOMEM;
-                return -1;
+                goto fail;
         }
 
         if (!(d->name = strdup(name))) {
                 errno = ENOMEM;
-                return -1;
+                goto fail;
         }
 
         if ((d->fd = open(name, O_RDWR|O_NOCTTY)) < 0) {
@@ -1194,6 +1194,7 @@ int sk_disk_open(const char *name, SkDisk **_d) {
 
         if (!S_ISBLK(st.st_mode)) {
                 errno = ENODEV;
+                ret = -1;
                 goto fail;
         }
 
@@ -1204,6 +1205,7 @@ int sk_disk_open(const char *name, SkDisk **_d) {
 
         if (d->size <= 0 || d->size == (uint64_t) -1) {
                 errno = EIO;
+                ret = -1;
                 goto fail;
         }
 
