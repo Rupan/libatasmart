@@ -24,8 +24,9 @@ NOTES:
         difficult to read and come with more than one or two
         #ifdefs. I am happy to include patches for non-Linux systems
         -- please note however that non-Linux operating systems are
-        relevant for release management. i.e. I want make sure that
-        libatasmart compiles fine on non-Linux systems before release.
+        not relevant for release management. i.e. I won't make sure
+        that libatasmart compiles fine on non-Linux systems before
+        release.
 
         libatasmart supports classic ATA/IDE disks (i.e. /dev/hda) as
         well as ATA disks that are connected through a SCSI layer
@@ -41,7 +42,7 @@ ACKNOWLEDGMENTS:
         projects.
 
 LICENSE:
-        LGPLv2+
+        LGPLv2.1+
 
 AUTHOR:
 	Lennart Poettering
