@@ -2,6 +2,7 @@ skdump
 sktest
 .deps/
 .libs/
+Makefile
 Makefile.in
 aclocal.m4
 *.o

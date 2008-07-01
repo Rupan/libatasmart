@@ -16,7 +16,7 @@
 # License along with libatasmart. If not, If not, see
 # <http://www.gnu.org/licenses/>.
 
-EXTRA_DIST = bootstrap.sh LGPL README
+EXTRA_DIST = bootstrap.sh LGPL README atasmart.vapi
 SUBDIRS =
 
 MAINTAINERCLEANFILES =
