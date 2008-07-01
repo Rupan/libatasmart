@@ -4,22 +4,22 @@
 #define foosmarthfoo
 
 /***
-    This file is part of SmartKit.
+    This file is part of libatasmart.
 
     Copyright 2008 Lennart Poettering
 
-    SmartKit is free software; you can redistribute it and/or modify
+    libatasmart is free software; you can redistribute it and/or modify
     it under the terms of the GNU Lesser General Public License as
     published by the Free Software Foundation, either version 2.1 of the
     License, or (at your option) any later version.
 
-    SmartKit is distributed in the hope that it will be useful, but
+    libatasmart is distributed in the hope that it will be useful, but
     WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
     Lesser General Public License for more details.
 
     You should have received a copy of the GNU Lesser General Public
-    License along with SmartKit. If not, If not, see
+    License along with libatasmart. If not, If not, see
     <http://www.gnu.org/licenses/>.
 ***/
 
