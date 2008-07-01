@@ -43,7 +43,7 @@
 #include <linux/hdreg.h>
 #include <linux/fs.h>
 
-#include "smart.h"
+#include "atasmart.h"
 
 #define SK_TIMEOUT 2000
 

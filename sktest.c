@@ -24,7 +24,7 @@
 #include <errno.h>
 #include <stdio.h>
 
-#include "smart.h"
+#include "atasmart.h"
 
 int main(int argc, char *argv[]) {
         int ret;
