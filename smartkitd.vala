@@ -85,13 +85,14 @@ public interface DiskAPI {
         public abstract uint getExtendedTestPollingMinutes() throws Error;
         public abstract uint getConveyanceTestPollingMinutes() throws Error;
 
-/*         public abstract DBus.ObjectPath[] getAttributes() throws Error; */
+        public abstract DBus.ObjectPath[] getAttributes() throws Error;
 }
 
 [DBus (name = "net.poettering.SmartKit.Manager")]
 public interface ManagerAPI {
         public abstract DBus.ObjectPath getDiskByUDI(string udi) throws Error;
         public abstract DBus.ObjectPath getDiskByPath(string path) throws Error;
+        public abstract DBus.ObjectPath[] getDisks() throws Error;
 }
 
 string clean_path(string s) {
@@ -114,7 +115,7 @@ public class Attribute : GLib.Object, AttributeAPI {
         public Disk disk { get; construct; }
         public DBus.Connection connection { get; construct; }
 
-        public uint8 id;
+        public uint8 _id;
         public string name;
         public SmartAttributeUnit pretty_unit;
         public uint8 threshold;
@@ -132,7 +133,7 @@ public class Attribute : GLib.Object, AttributeAPI {
         }
 
         public void set(SmartAttributeParsedData a) {
-                id = a.id;
+                _id = a.id;
                 name = a.name;
                 pretty_unit = a.pretty_unit;
                 threshold = a.threshold;
@@ -153,7 +154,7 @@ public class Attribute : GLib.Object, AttributeAPI {
         }
 
         public uint8 getId() throws Error {
-                return id;
+                return _id;
         }
 
         public string getName() throws Error {
@@ -169,10 +170,12 @@ public class Attribute : GLib.Object, AttributeAPI {
                                 return "none";
                         case SmartAttributeUnit.MSECONDS:
                                 return "mseconds";
+                        case SmartAttributeUnit.SECTORS:
+                                return "sectors";
                         case SmartAttributeUnit.MKELVIN:
                                 return "mkelvin";
                         default:
-                                throw new Error.UNKNOWN_UNIT("Unit unknown.");
+                                throw new Error.UNKNOWN_UNIT("Unit unknown %i.", pretty_unit);
                 }
         }
 
@@ -245,6 +248,12 @@ public class Disk : GLib.Object, DiskAPI {
         }
 
         private void attribute_callback(void* disk, SmartAttributeParsedData a) {
+                foreach (Attribute attr in attributes)
+                        if (attr._id == a.id) {
+                                attr.set(a);
+                                return;
+                        }
+
                 Attribute attr;
 
                 attr = new Attribute(this, this.connection);
@@ -350,9 +359,11 @@ public class Disk : GLib.Object, DiskAPI {
 
                 if (this.disk.smart_read_data() < 0)
                         throw new Error.SYSTEM("smart_read_data() failed: %s", Smart.strerror(Smart.errno));
+
+                populate_attributes();
         }
 
-        public void startSelfTest(string test) {
+        public void startSelfTest(string test) throws Error {
                 SmartSelfTest t;
 
                 switch (test) {
@@ -373,7 +384,7 @@ public class Disk : GLib.Object, DiskAPI {
                         throw new Error.SYSTEM("smart_self_test() failed: %s", Smart.strerror(Smart.errno));
         }
 
-        public void abortSelfTest() {
+        public void abortSelfTest() throws Error {
 
                 if (this.disk.smart_self_test(SmartSelfTest.ABORT) < 0)
                         throw new Error.SYSTEM("smart_self_test() failed: %s", Smart.strerror(Smart.errno));
@@ -517,6 +528,18 @@ public class Disk : GLib.Object, DiskAPI {
                 return d->conveyance_test_polling_minutes;
         }
 
+        public DBus.ObjectPath[] getAttributes() throws Error {
+                DBus.ObjectPath[] p = new DBus.ObjectPath[attributes.length()];
+
+                int i = 0;
+                foreach (Attribute a in attributes) {
+                        p[i++] = new DBus.ObjectPath(a.dbus_path);
+                }
+
+                return p;
+        }
+
+
 /*     public uint64 size { */
 /*         get { */
 /*             uint64 s; */
@@ -581,6 +604,18 @@ public class Manager : GLib.Object, ManagerAPI {
 
                 throw new Error.NOT_FOUND("Device not found");
         }
+
+        public DBus.ObjectPath[] getDisks() throws Error {
+                DBus.ObjectPath[] p = new DBus.ObjectPath[disks.length()];
+
+                int i = 0;
+                foreach (Disk d in disks) {
+                        p[i++] = new DBus.ObjectPath(d.dbus_path);
+                }
+
+                return p;
+        }
+
 }
 
 int main() {
