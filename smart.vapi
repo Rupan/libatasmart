@@ -81,7 +81,7 @@ namespace Smart {
 
         [CCode (cname="SkSmartAttributeUnit", cprefix="SK_SMART_ATTRIBUTE_UNIT_")]
         public enum SmartAttributeUnit {
-                UNKNOWN, NONE, MSECONDS, SECTORS, KELVIN
+                UNKNOWN, NONE, MSECONDS, SECTORS, MKELVIN
         }
 
         [CCode (cname="sk_smart_attribute_unit_to_string")]
@@ -91,7 +91,7 @@ namespace Smart {
         [CCode (cname="SkSmartAttributeParsedData")]
         public struct SmartAttributeParsedData {
                 public uint8 id;
-                public char *name;
+                public string name;
                 public SmartAttributeUnit pretty_unit;
                 public uint16 flags;
                 public uint8 threshold;

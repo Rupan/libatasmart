@@ -84,6 +84,8 @@ public interface DiskAPI {
         public abstract uint getShortTestPollingMinutes() throws Error;
         public abstract uint getExtendedTestPollingMinutes() throws Error;
         public abstract uint getConveyanceTestPollingMinutes() throws Error;
+
+/*         public abstract DBus.ObjectPath[] getAttributes() throws Error; */
 }
 
 [DBus (name = "net.poettering.SmartKit.Manager")]
@@ -131,7 +133,7 @@ public class Attribute : GLib.Object, AttributeAPI {
 
         public void set(SmartAttributeParsedData a) {
                 id = a.id;
-                name = "%s".printf(a.name);
+                name = a.name;
                 pretty_unit = a.pretty_unit;
                 threshold = a.threshold;
                 threshold_valid = a.threshold_valid;
@@ -167,8 +169,8 @@ public class Attribute : GLib.Object, AttributeAPI {
                                 return "none";
                         case SmartAttributeUnit.MSECONDS:
                                 return "mseconds";
-                        case SmartAttributeUnit.KELVIN:
-                                return "kelvin";
+                        case SmartAttributeUnit.MKELVIN:
+                                return "mkelvin";
                         default:
                                 throw new Error.UNKNOWN_UNIT("Unit unknown.");
                 }
