@@ -22,7 +22,7 @@
 
 using GLib;
 
-[CCode (cheader_filename="smart.h")]
+[CCode (cheader_filename="atasmart.h")]
 namespace Smart {
 
         [CCode (cname="SkSmartSelfTest", cprefix="SK_SMART_SELF_TEST_")]
