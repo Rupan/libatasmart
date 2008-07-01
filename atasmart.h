@@ -27,12 +27,12 @@
 
 typedef int SkBool;
 
-#ifndef TRUE
-#define TRUE 1
+#ifndef FALSE
+#define FALSE   (0)
 #endif
 
-#ifndef FALSE
-#define FALSE (!TRUE)
+#ifndef TRUE
+#define TRUE    (!FALSE)
 #endif
 
 /* ATA SMART test type (ATA8 7.52.5.2) */

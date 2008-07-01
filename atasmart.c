@@ -24,8 +24,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
-
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <alloca.h>
@@ -1043,7 +1041,7 @@ static char *print_value(char *s, size_t len, const SkSmartAttributeParsedData *
         s[len-1] = 0;
 
         return s;
-};
+}
 
 #define HIGHLIGHT "\x1B[1m"
 #define ENDHIGHLIGHT "\x1B[0m"
