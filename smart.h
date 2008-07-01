@@ -23,7 +23,17 @@
     <http://www.gnu.org/licenses/>.
 ***/
 
-#include <glib.h>
+#include <inttypes.h>
+
+typedef int SkBool;
+
+#ifndef TRUE
+#define TRUE 1
+#endif
+
+#ifndef FALSE
+#define FALSE (!TRUE)
+#endif
 
 /* ATA SMART test type (ATA8 7.52.5.2) */
 typedef enum SkSmartSelfTest {
@@ -36,9 +46,9 @@ typedef enum SkSmartSelfTest {
 const char* sk_smart_self_test_to_string(SkSmartSelfTest test);
 
 typedef struct SkIdentifyParsedData {
-        gchar serial[21];
-        gchar firmware[9];
-        gchar model[41];
+        char serial[21];
+        char firmware[9];
+        char model[41];
 
         /* This structure may be extended at any time without this being
          * considered an ABI change. So take care when you copy it. */
@@ -81,10 +91,10 @@ typedef struct SkSmartParsedData {
         unsigned self_test_execution_percent_remaining;
 
         /* Fixed data */
-        gboolean short_and_extended_test_available:1;
-        gboolean conveyance_test_available:1;
-        gboolean start_test_available:1;
-        gboolean abort_test_available:1;
+        SkBool short_and_extended_test_available:1;
+        SkBool conveyance_test_available:1;
+        SkBool start_test_available:1;
+        SkBool abort_test_available:1;
 
         unsigned short_test_polling_minutes;
         unsigned extended_test_polling_minutes;
@@ -94,7 +104,7 @@ typedef struct SkSmartParsedData {
          * considered an ABI change. So take care when you copy it.  */
 } SkSmartParsedData;
 
-gboolean sk_smart_self_test_available(const SkSmartParsedData *d, SkSmartSelfTest test);
+SkBool sk_smart_self_test_available(const SkSmartParsedData *d, SkSmartSelfTest test);
 unsigned sk_smart_self_test_polling_minutes(const SkSmartParsedData *d, SkSmartSelfTest test);
 
 typedef enum SkSmartAttributeUnit {
@@ -110,23 +120,23 @@ const char* sk_smart_attribute_unit_to_string(SkSmartAttributeUnit unit);
 
 typedef struct SkSmartAttributeParsedData {
         /* Fixed data */
-        guint8 id;
+        uint8_t id;
         const char *name;
         SkSmartAttributeUnit pretty_unit; /* for pretty_value */
 
-        guint16 flags;
+        uint16_t flags;
 
-        guint8 threshold;
-        gboolean threshold_valid:1;
+        uint8_t threshold;
+        SkBool threshold_valid:1;
 
-        gboolean online:1;
-        gboolean prefailure:1;
+        SkBool online:1;
+        SkBool prefailure:1;
 
         /* Volatile data */
-        gboolean good:1;
-        guint8 current_value, worst_value;
-        guint64 pretty_value;
-        guint8 raw[6];
+        SkBool good:1;
+        uint8_t current_value, worst_value;
+        uint64_t pretty_value;
+        uint8_t raw[6];
 
         /* This structure may be extended at any time without this being
          * considered an ABI change. So take care when you copy it. */
@@ -134,26 +144,26 @@ typedef struct SkSmartAttributeParsedData {
 
 typedef struct SkDisk SkDisk;
 
-int sk_disk_open(const gchar *name, SkDisk **d);
+int sk_disk_open(const char *name, SkDisk **d);
 
-int sk_disk_get_size(SkDisk *d, guint64 *bytes);
+int sk_disk_get_size(SkDisk *d, uint64_t *bytes);
 
-int sk_disk_check_sleep_mode(SkDisk *d, gboolean *awake);
+int sk_disk_check_sleep_mode(SkDisk *d, SkBool *awake);
 
-int sk_disk_identify_is_available(SkDisk *d, gboolean *available);
+int sk_disk_identify_is_available(SkDisk *d, SkBool *available);
 int sk_disk_identify_parse(SkDisk *d, const SkIdentifyParsedData **data);
 
-typedef void (*SkSmartAttributeParseCallback)(SkDisk *d, const SkSmartAttributeParsedData *a, gpointer userdata);
+typedef void (*SkSmartAttributeParseCallback)(SkDisk *d, const SkSmartAttributeParsedData *a, void* userdata);
 
-int sk_disk_smart_is_available(SkDisk *d, gboolean *available);
-int sk_disk_smart_status(SkDisk *d, gboolean *good);
+int sk_disk_smart_is_available(SkDisk *d, SkBool *available);
+int sk_disk_smart_status(SkDisk *d, SkBool *good);
 /* Reading SMART data might cause the disk to wake up from
  * sleep. Hence from monitoring daemons make sure to call
  * sk_disk_check_power_mode() to check wether the disk is sleeping and
  * skip the read if so. */
 int sk_disk_smart_read_data(SkDisk *d);
 int sk_disk_smart_parse(SkDisk *d, const SkSmartParsedData **data);
-int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, gpointer userdata);
+int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, void* userdata);
 int sk_disk_smart_self_test(SkDisk *d, SkSmartSelfTest test);
 
 int sk_disk_dump(SkDisk *d);

@@ -1,5 +1,5 @@
-CFLAGS=`pkg-config --cflags glib-2.0` -pipe -Wall -W -O0 -g -I.
-LIBS=`pkg-config --libs glib-2.0`
+CFLAGS=-pipe -Wall -W -O0 -g -I.
+LIBS=
 
 all: skdump sktest smartkitd gnome-disk-health gnome-disk-health.ui
 

@@ -24,6 +24,12 @@
 #include <config.h>
 #endif
 
+#define _GNU_SOURCE
+
+#include <arpa/inet.h>
+#include <stdlib.h>
+#include <alloca.h>
+#include <assert.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
@@ -36,7 +42,6 @@
 #include <scsi/scsi_ioctl.h>
 #include <linux/hdreg.h>
 #include <linux/fs.h>
-#include <glib.h>
 
 #include "smart.h"
 
@@ -57,19 +62,19 @@ typedef enum SkDiskType {
 } SkDiskType;
 
 struct SkDisk {
-        gchar *name;
+        char *name;
         int fd;
         SkDiskType type;
 
-        guint64 size;
+        uint64_t size;
 
-        guint8 identify[512];
-        guint8 smart_data[512];
-        guint8 smart_threshold_data[512];
+        uint8_t identify[512];
+        uint8_t smart_data[512];
+        uint8_t smart_threshold_data[512];
 
-        gboolean identify_data_valid:1;
-        gboolean smart_data_valid:1;
-        gboolean smart_threshold_data_valid:1;
+        SkBool identify_data_valid:1;
+        SkBool smart_data_valid:1;
+        SkBool smart_threshold_data_valid:1;
 
         SkIdentifyParsedData identify_parsed_data;
         SkSmartParsedData smart_parsed_data;
@@ -93,42 +98,42 @@ typedef enum SkSmartCommand {
         SK_SMART_COMMAND_RETURN_STATUS = 0xDA
 } SkSmartCommand;
 
-static gboolean disk_smart_is_available(SkDisk *d) {
+static SkBool disk_smart_is_available(SkDisk *d) {
         return d->identify_data_valid && !!(d->identify[164] & 1);
 }
 
-static gboolean disk_smart_is_enabled(SkDisk *d) {
+static SkBool disk_smart_is_enabled(SkDisk *d) {
         return d->identify_data_valid && !!(d->identify[170] & 1);
 }
 
-static gboolean disk_smart_is_conveyance_test_available(SkDisk *d) {
-        g_assert(d->smart_data_valid);
+static SkBool disk_smart_is_conveyance_test_available(SkDisk *d) {
+        assert(d->smart_data_valid);
 
         return !!(d->smart_data[367] & 32);
 }
-static gboolean disk_smart_is_short_and_extended_test_available(SkDisk *d) {
-        g_assert(d->smart_data_valid);
+static SkBool disk_smart_is_short_and_extended_test_available(SkDisk *d) {
+        assert(d->smart_data_valid);
 
         return !!(d->smart_data[367] & 16);
 }
 
-static gboolean disk_smart_is_start_test_available(SkDisk *d) {
-        g_assert(d->smart_data_valid);
+static SkBool disk_smart_is_start_test_available(SkDisk *d) {
+        assert(d->smart_data_valid);
 
         return !!(d->smart_data[367] & 1);
 }
 
-static gboolean disk_smart_is_abort_test_available(SkDisk *d) {
-        g_assert(d->smart_data_valid);
+static SkBool disk_smart_is_abort_test_available(SkDisk *d) {
+        assert(d->smart_data_valid);
 
         return !!(d->smart_data[367] & 41);
 }
 
-static int disk_ata_command(SkDisk *d, SkAtaCommand command, SkDirection direction, gpointer cmd_data, gpointer data, size_t *len) {
-        guint8 *bytes = cmd_data;
+static int disk_ata_command(SkDisk *d, SkAtaCommand command, SkDirection direction, void* cmd_data, void* data, size_t *len) {
+        uint8_t *bytes = cmd_data;
         int ret;
 
-        g_assert(d->type == SK_DISK_TYPE_ATA);
+        assert(d->type == SK_DISK_TYPE_ATA);
 
         switch (direction) {
 
@@ -142,15 +147,15 @@ static int disk_ata_command(SkDisk *d, SkAtaCommand command, SkDirection directi
                         return -1;
 
                 case SK_DIRECTION_IN: {
-                        guint8 *ioctl_data;
+                        uint8_t *ioctl_data;
 
                         /* We have HDIO_DRIVE_CMD which can only read, but not write,
                          * and cannot do LBA. We use it for all read commands. */
 
-                        ioctl_data = g_alloca(4 + *len);
+                        ioctl_data = alloca(4 + *len);
                         memset(ioctl_data, 0, 4 + *len);
 
-                        ioctl_data[0] = (guint8) command;  /* COMMAND */
+                        ioctl_data[0] = (uint8_t) command;  /* COMMAND */
                         ioctl_data[1] = ioctl_data[0] == WIN_SMART ? bytes[9] : bytes[3];  /* SECTOR/NSECTOR */
                         ioctl_data[2] = bytes[1];          /* FEATURE */
                         ioctl_data[3] = bytes[3];          /* NSECTOR */
@@ -169,7 +174,7 @@ static int disk_ata_command(SkDisk *d, SkAtaCommand command, SkDirection directi
                 }
 
                 case SK_DIRECTION_NONE: {
-                        guint8 ioctl_data[7];
+                        uint8_t ioctl_data[7];
 
                         /* We have HDIO_DRIVE_TASK which can neither read nor
                          * write, but can do LBA. We use it for all commands that
@@ -177,7 +182,7 @@ static int disk_ata_command(SkDisk *d, SkAtaCommand command, SkDirection directi
 
                         memset(ioctl_data, 0, sizeof(ioctl_data));
 
-                        ioctl_data[0] = (guint8) command;  /* COMMAND */
+                        ioctl_data[0] = (uint8_t) command;  /* COMMAND */
                         ioctl_data[1] = bytes[1];         /* FEATURE */
                         ioctl_data[2] = bytes[3];         /* NSECTOR */
 
@@ -204,7 +209,7 @@ static int disk_ata_command(SkDisk *d, SkAtaCommand command, SkDirection directi
                 }
 
                 default:
-                        g_assert_not_reached();
+                        assert(FALSE);
                         return -1;
         }
 }
@@ -232,11 +237,11 @@ static int sg_io(int fd, int direction,
         return ioctl(fd, SG_IO, &io_hdr);
 }
 
-static int disk_passthrough_command(SkDisk *d, SkAtaCommand command, SkDirection direction, gpointer cmd_data, gpointer data, size_t *len) {
-        guint8 *bytes = cmd_data;
-        guint8 cdb[16];
-        guint8 sense[32];
-        guint8 *desc = sense+8;
+static int disk_passthrough_command(SkDisk *d, SkAtaCommand command, SkDirection direction, void* cmd_data, void* data, size_t *len) {
+        uint8_t *bytes = cmd_data;
+        uint8_t cdb[16];
+        uint8_t sense[32];
+        uint8_t *desc = sense+8;
         int ret;
 
         static const int direction_map[] = {
@@ -245,7 +250,7 @@ static int disk_passthrough_command(SkDisk *d, SkAtaCommand command, SkDirection
                 [SK_DIRECTION_OUT] = SG_DXFER_TO_DEV
         };
 
-        g_assert(d->type == SK_DISK_TYPE_ATA_PASSTHROUGH);
+        assert(d->type == SK_DISK_TYPE_ATA_PASSTHROUGH);
 
         /* ATA Pass-Through 16 byte command, as described in "T10 04-262r8
          * ATA Command Pass-Through":
@@ -279,7 +284,7 @@ static int disk_passthrough_command(SkDisk *d, SkAtaCommand command, SkDirection
         cdb[12] = bytes[7]; /* LBA HIGH */
 
         cdb[13] = bytes[10] & 0x4F; /* SELECT */
-        cdb[14] = (guint8) command;
+        cdb[14] = (uint8_t) command;
 
         if ((ret = sg_io(d->fd, direction_map[direction], cdb, sizeof(cdb), data, (size_t) cdb[6] * 512, sense, sizeof(sense))) < 0)
                 return ret;
@@ -303,31 +308,31 @@ static int disk_passthrough_command(SkDisk *d, SkAtaCommand command, SkDirection
         return ret;
 }
 
-static int disk_command(SkDisk *d, SkAtaCommand command, SkDirection direction, gpointer cmd_data, gpointer data, size_t *len) {
+static int disk_command(SkDisk *d, SkAtaCommand command, SkDirection direction, void* cmd_data, void* data, size_t *len) {
 
-        static int (* const disk_command_table[_SK_DISK_TYPE_MAX]) (SkDisk *d, SkAtaCommand command, SkDirection direction, gpointer cmd_data, gpointer data, size_t *len) = {
+        static int (* const disk_command_table[_SK_DISK_TYPE_MAX]) (SkDisk *d, SkAtaCommand command, SkDirection direction, void* cmd_data, void* data, size_t *len) = {
                 [SK_DISK_TYPE_ATA] = disk_ata_command,
                 [SK_DISK_TYPE_ATA_PASSTHROUGH] = disk_passthrough_command,
         };
 
-        g_assert(d);
-        g_assert(d->type <= _SK_DISK_TYPE_MAX);
-        g_assert(direction <= _SK_DIRECTION_MAX);
+        assert(d);
+        assert(d->type <= _SK_DISK_TYPE_MAX);
+        assert(direction <= _SK_DIRECTION_MAX);
 
-        g_assert(direction == SK_DIRECTION_NONE || (data && len && *len > 0));
-        g_assert(direction != SK_DIRECTION_NONE || (!data && !len));
+        assert(direction == SK_DIRECTION_NONE || (data && len && *len > 0));
+        assert(direction != SK_DIRECTION_NONE || (!data && !len));
 
         return disk_command_table[d->type](d, command, direction, cmd_data, data, len);
 }
 
 static int disk_identify_device(SkDisk *d) {
-        guint16 cmd[6];
+        uint16_t cmd[6];
         int ret;
         size_t len = 512;
 
         memset(cmd, 0, sizeof(cmd));
 
-        cmd[1] = GUINT16_TO_BE(1);
+        cmd[1] = htons(1);
 
         if ((ret = disk_command(d, SK_ATA_COMMAND_IDENTIFY_DEVICE, SK_DIRECTION_IN, cmd, d->identify, &len)) < 0)
                 return ret;
@@ -342,9 +347,9 @@ static int disk_identify_device(SkDisk *d) {
         return 0;
 }
 
-int sk_disk_check_sleep_mode(SkDisk *d, gboolean *awake) {
+int sk_disk_check_sleep_mode(SkDisk *d, SkBool *awake) {
         int ret;
-        guint16 cmd[6];
+        uint16_t cmd[6];
 
         if (!d->identify_data_valid) {
                 errno = ENOTSUP;
@@ -356,18 +361,18 @@ int sk_disk_check_sleep_mode(SkDisk *d, gboolean *awake) {
         if ((ret = disk_command(d, SK_ATA_COMMAND_CHECK_POWER_MODE, SK_DIRECTION_NONE, cmd, NULL, 0)) < 0)
                 return ret;
 
-        if (cmd[0] != 0 || (GUINT16_FROM_BE(cmd[5]) & 1) != 0) {
+        if (cmd[0] != 0 || (ntohs(cmd[5]) & 1) != 0) {
                 errno = EIO;
                 return -1;
         }
 
-        *awake = GUINT16_FROM_BE(cmd[1]) == 0xFF;
+        *awake = ntohs(cmd[1]) == 0xFF;
 
         return 0;
 }
 
-static int disk_smart_enable(SkDisk *d, gboolean b) {
-        guint16 cmd[6];
+static int disk_smart_enable(SkDisk *d, SkBool b) {
+        uint16_t cmd[6];
 
         if (!disk_smart_is_available(d)) {
                 errno = ENOTSUP;
@@ -376,16 +381,16 @@ static int disk_smart_enable(SkDisk *d, gboolean b) {
 
         memset(cmd, 0, sizeof(cmd));
 
-        cmd[0] = GUINT16_TO_BE(b ? SK_SMART_COMMAND_ENABLE_OPERATIONS : SK_SMART_COMMAND_DISABLE_OPERATIONS);
-        cmd[2] = GUINT16_TO_BE(0x0000U);
-        cmd[3] = GUINT16_TO_BE(0x00C2U);
-        cmd[4] = GUINT16_TO_BE(0x4F00U);
+        cmd[0] = htons(b ? SK_SMART_COMMAND_ENABLE_OPERATIONS : SK_SMART_COMMAND_DISABLE_OPERATIONS);
+        cmd[2] = htons(0x0000U);
+        cmd[3] = htons(0x00C2U);
+        cmd[4] = htons(0x4F00U);
 
         return disk_command(d, SK_ATA_COMMAND_SMART, SK_DIRECTION_NONE, cmd, NULL, 0);
 }
 
 int sk_disk_smart_read_data(SkDisk *d) {
-        guint16 cmd[6];
+        uint16_t cmd[6];
         int ret;
         size_t len = 512;
 
@@ -396,11 +401,11 @@ int sk_disk_smart_read_data(SkDisk *d) {
 
         memset(cmd, 0, sizeof(cmd));
 
-        cmd[0] = GUINT16_TO_BE(SK_SMART_COMMAND_READ_DATA);
-        cmd[1] = GUINT16_TO_BE(1);
-        cmd[2] = GUINT16_TO_BE(0x0000U);
-        cmd[3] = GUINT16_TO_BE(0x00C2U);
-        cmd[4] = GUINT16_TO_BE(0x4F00U);
+        cmd[0] = htons(SK_SMART_COMMAND_READ_DATA);
+        cmd[1] = htons(1);
+        cmd[2] = htons(0x0000U);
+        cmd[3] = htons(0x00C2U);
+        cmd[4] = htons(0x4F00U);
 
         if ((ret = disk_command(d, SK_ATA_COMMAND_SMART, SK_DIRECTION_IN, cmd, d->smart_data, &len)) < 0)
                 return ret;
@@ -411,7 +416,7 @@ int sk_disk_smart_read_data(SkDisk *d) {
 }
 
 static int disk_smart_read_thresholds(SkDisk *d) {
-        guint16 cmd[6];
+        uint16_t cmd[6];
         int ret;
         size_t len = 512;
 
@@ -422,11 +427,11 @@ static int disk_smart_read_thresholds(SkDisk *d) {
 
         memset(cmd, 0, sizeof(cmd));
 
-        cmd[0] = GUINT16_TO_BE(SK_SMART_COMMAND_READ_THRESHOLDS);
-        cmd[1] = GUINT16_TO_BE(1);
-        cmd[2] = GUINT16_TO_BE(0x0000U);
-        cmd[3] = GUINT16_TO_BE(0x00C2U);
-        cmd[4] = GUINT16_TO_BE(0x4F00U);
+        cmd[0] = htons(SK_SMART_COMMAND_READ_THRESHOLDS);
+        cmd[1] = htons(1);
+        cmd[2] = htons(0x0000U);
+        cmd[3] = htons(0x00C2U);
+        cmd[4] = htons(0x4F00U);
 
         if ((ret = disk_command(d, SK_ATA_COMMAND_SMART, SK_DIRECTION_IN, cmd, d->smart_threshold_data, &len)) < 0)
                 return ret;
@@ -436,8 +441,8 @@ static int disk_smart_read_thresholds(SkDisk *d) {
         return ret;
 }
 
-int sk_disk_smart_status(SkDisk *d, gboolean *good) {
-        guint16 cmd[6];
+int sk_disk_smart_status(SkDisk *d, SkBool *good) {
+        uint16_t cmd[6];
         int ret;
 
         if (!disk_smart_is_available(d)) {
@@ -447,19 +452,19 @@ int sk_disk_smart_status(SkDisk *d, gboolean *good) {
 
         memset(cmd, 0, sizeof(cmd));
 
-        cmd[0] = GUINT16_TO_BE(SK_SMART_COMMAND_RETURN_STATUS);
-        cmd[1] = GUINT16_TO_BE(0x0000U);
-        cmd[3] = GUINT16_TO_BE(0x00C2U);
-        cmd[4] = GUINT16_TO_BE(0x4F00U);
+        cmd[0] = htons(SK_SMART_COMMAND_RETURN_STATUS);
+        cmd[1] = htons(0x0000U);
+        cmd[3] = htons(0x00C2U);
+        cmd[4] = htons(0x4F00U);
 
         if ((ret = disk_command(d, SK_ATA_COMMAND_SMART, SK_DIRECTION_NONE, cmd, NULL, 0)) < 0)
                 return ret;
 
-        if (cmd[3] == GUINT16_TO_BE(0x00C2U) &&
-            cmd[4] == GUINT16_TO_BE(0x4F00U))
+        if (cmd[3] == htons(0x00C2U) &&
+            cmd[4] == htons(0x4F00U))
                 *good = TRUE;
-        else if (cmd[3] == GUINT16_TO_BE(0x002CU) &&
-            cmd[4] == GUINT16_TO_BE(0xF400U))
+        else if (cmd[3] == htons(0x002CU) &&
+            cmd[4] == htons(0xF400U))
                 *good = FALSE;
         else {
                 errno = EIO;
@@ -470,7 +475,7 @@ int sk_disk_smart_status(SkDisk *d, gboolean *good) {
 }
 
 int sk_disk_smart_self_test(SkDisk *d, SkSmartSelfTest test) {
-        guint16 cmd[6];
+        uint16_t cmd[6];
         int ret;
 
         if (!disk_smart_is_available(d)) {
@@ -482,7 +487,7 @@ int sk_disk_smart_self_test(SkDisk *d, SkSmartSelfTest test) {
                 if ((ret = sk_disk_smart_read_data(d)) < 0)
                         return -1;
 
-        g_assert(d->smart_data_valid);
+        assert(d->smart_data_valid);
 
         if (test != SK_SMART_SELF_TEST_SHORT &&
             test != SK_SMART_SELF_TEST_EXTENDED &&
@@ -508,36 +513,36 @@ int sk_disk_smart_self_test(SkDisk *d, SkSmartSelfTest test) {
 
         memset(cmd, 0, sizeof(cmd));
 
-        cmd[0] = GUINT16_TO_BE(SK_SMART_COMMAND_EXECUTE_OFFLINE_IMMEDIATE);
-        cmd[2] = GUINT16_TO_BE(0x0000U);
-        cmd[3] = GUINT16_TO_BE(0x00C2U);
-        cmd[4] = GUINT16_TO_BE(0x4F00U | (guint16) test);
+        cmd[0] = htons(SK_SMART_COMMAND_EXECUTE_OFFLINE_IMMEDIATE);
+        cmd[2] = htons(0x0000U);
+        cmd[3] = htons(0x00C2U);
+        cmd[4] = htons(0x4F00U | (uint16_t) test);
 
         return disk_command(d, SK_ATA_COMMAND_SMART, SK_DIRECTION_NONE, cmd, NULL, NULL);
 }
 
-static void swap_strings(gchar *s, size_t len) {
-        g_assert((len & 1) == 0);
+static void swap_strings(char *s, size_t len) {
+        assert((len & 1) == 0);
 
         for (; len > 0; s += 2, len -= 2) {
-                gchar t;
+                char t;
                 t = s[0];
                 s[0] = s[1];
                 s[1] = t;
         }
 }
 
-static void clean_strings(gchar *s) {
-        gchar *e;
+static void clean_strings(char *s) {
+        char *e;
 
         for (e = s; *e; e++)
-                if (!g_ascii_isprint(*e))
+                if (*e < ' ' || *e >= 127)
                         *e = ' ';
 }
 
-static void drop_spaces(gchar *s) {
-        gchar *d = s;
-        gboolean prev_space = FALSE;
+static void drop_spaces(char *s) {
+        char *d = s;
+        SkBool prev_space = FALSE;
 
         s += strspn(s, " ");
 
@@ -559,7 +564,7 @@ static void drop_spaces(gchar *s) {
         *d = 0;
 }
 
-static void read_string(gchar *d, guint8 *s, size_t len) {
+static void read_string(char *d, uint8_t *s, size_t len) {
         memcpy(d, s, len);
         d[len] = 0;
         swap_strings(d, len);
@@ -583,7 +588,7 @@ int sk_disk_identify_parse(SkDisk *d, const SkIdentifyParsedData **ipd) {
         return 0;
 }
 
-int sk_disk_smart_is_available(SkDisk *d, gboolean *b) {
+int sk_disk_smart_is_available(SkDisk *d, SkBool *b) {
 
         if (!d->identify_data_valid) {
                 errno = ENOTSUP;
@@ -594,7 +599,7 @@ int sk_disk_smart_is_available(SkDisk *d, gboolean *b) {
         return 0;
 }
 
-int sk_disk_identify_is_available(SkDisk *d, gboolean *b) {
+int sk_disk_identify_is_available(SkDisk *d, SkBool *b) {
 
         *b = d->identify_data_valid;
         return 0;
@@ -655,7 +660,7 @@ const char* sk_smart_self_test_to_string(SkSmartSelfTest test) {
         return NULL;
 }
 
-gboolean sk_smart_self_test_available(const SkSmartParsedData *d, SkSmartSelfTest test) {
+SkBool sk_smart_self_test_available(const SkSmartParsedData *d, SkSmartSelfTest test) {
 
         if (!d->start_test_available)
                 return FALSE;
@@ -747,7 +752,7 @@ static const SkSmartAttributeInfo const attribute_info[255] = {
 };
 
 static void make_pretty(SkSmartAttributeParsedData *a) {
-        guint64 fourtyeight;
+        uint64_t fourtyeight;
 
         if (!a->name)
                 return;
@@ -756,12 +761,12 @@ static void make_pretty(SkSmartAttributeParsedData *a) {
                 return;
 
         fourtyeight =
-                ((guint64) a->raw[0]) |
-                (((guint64) a->raw[1]) << 8) |
-                (((guint64) a->raw[2]) << 16) |
-                (((guint64) a->raw[3]) << 24) |
-                (((guint64) a->raw[4]) << 32) |
-                (((guint64) a->raw[5]) << 40);
+                ((uint64_t) a->raw[0]) |
+                (((uint64_t) a->raw[1]) << 8) |
+                (((uint64_t) a->raw[2]) << 16) |
+                (((uint64_t) a->raw[3]) << 24) |
+                (((uint64_t) a->raw[4]) << 32) |
+                (((uint64_t) a->raw[5]) << 40);
 
         if (!strcmp(a->name, "spin-up-time"))
                 a->pretty_value = fourtyeight & 0xFFFF;
@@ -781,7 +786,7 @@ static void make_pretty(SkSmartAttributeParsedData *a) {
                 a->pretty_value = fourtyeight;
 }
 
-static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, guint8 id) {
+static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
         const SkIdentifyParsedData *ipd;
 
         /* These are the simple cases */
@@ -865,7 +870,7 @@ int sk_disk_smart_parse(SkDisk *d, const SkSmartParsedData **spd) {
         d->smart_parsed_data.self_test_execution_percent_remaining = 10*(d->smart_data[363] & 0xF);
         d->smart_parsed_data.self_test_execution_status = (d->smart_data[363] >> 4) & 0xF;
 
-        d->smart_parsed_data.total_offline_data_collection_seconds = (guint16) d->smart_data[364] | ((guint16) d->smart_data[365] << 8);
+        d->smart_parsed_data.total_offline_data_collection_seconds = (uint16_t) d->smart_data[364] | ((uint16_t) d->smart_data[365] << 8);
 
         d->smart_parsed_data.conveyance_test_available = disk_smart_is_conveyance_test_available(d);
         d->smart_parsed_data.short_and_extended_test_available = disk_smart_is_short_and_extended_test_available(d);
@@ -873,7 +878,7 @@ int sk_disk_smart_parse(SkDisk *d, const SkSmartParsedData **spd) {
         d->smart_parsed_data.abort_test_available = disk_smart_is_abort_test_available(d);
 
         d->smart_parsed_data.short_test_polling_minutes = d->smart_data[372];
-        d->smart_parsed_data.extended_test_polling_minutes = d->smart_data[373] != 0xFF ? d->smart_data[373] : ((guint16) d->smart_data[376] << 8 | (guint16) d->smart_data[375]);
+        d->smart_parsed_data.extended_test_polling_minutes = d->smart_data[373] != 0xFF ? d->smart_data[373] : ((uint16_t) d->smart_data[376] << 8 | (uint16_t) d->smart_data[375]);
         d->smart_parsed_data.conveyance_test_polling_minutes = d->smart_data[374];
 
         *spd = &d->smart_parsed_data;
@@ -882,7 +887,7 @@ int sk_disk_smart_parse(SkDisk *d, const SkSmartParsedData **spd) {
 }
 
 static void find_threshold(SkDisk *d, SkSmartAttributeParsedData *a) {
-        guint8 *p;
+        uint8_t *p;
         unsigned n;
 
         if (!d->smart_threshold_data_valid) {
@@ -907,8 +912,8 @@ static void find_threshold(SkDisk *d, SkSmartAttributeParsedData *a) {
                 a->current_value > a->threshold;
 }
 
-int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, gpointer userdata) {
-        guint8 *p;
+int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, void* userdata) {
+        uint8_t *p;
         unsigned n;
 
         if (!d->smart_data_valid) {
@@ -919,7 +924,7 @@ int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, 
         for (n = 0, p = d->smart_data + 2; n < 30; n++, p+=12) {
                 SkSmartAttributeParsedData a;
                 const SkSmartAttributeInfo *i;
-                gchar *an = NULL;
+                char *an = NULL;
 
                 if (p[0] == 0)
                         continue;
@@ -929,7 +934,7 @@ int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, 
                 a.current_value = p[3];
                 a.worst_value = p[4];
 
-                a.flags = ((guint16) p[2] << 8) | p[1];
+                a.flags = ((uint16_t) p[2] << 8) | p[1];
                 a.prefailure = !!(p[1] & 1);
                 a.online = !!(p[1] & 2);
 
@@ -939,7 +944,12 @@ int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, 
                         a.name = i->name;
                         a.pretty_unit = i->unit;
                 } else {
-                        a.name = an = g_strdup_printf("attribute-%u", a.id);
+                        if (asprintf(&an, "attribute-%u", a.id) < 0) {
+                                errno = ENOMEM;
+                                return -1;
+                        }
+
+                        a.name = an;
                         a.pretty_unit = SK_SMART_ATTRIBUTE_UNIT_UNKNOWN;
                 }
 
@@ -949,13 +959,13 @@ int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, 
 
                 cb(d, &a, userdata);
 
-                g_free(an);
+                free(an);
         }
 
         return 0;
 }
 
-static const char *yes_no(gboolean b) {
+static const char *yes_no(SkBool b) {
         return  b ? "yes" : "no";
 }
 
@@ -975,12 +985,14 @@ const char* sk_smart_attribute_unit_to_string(SkSmartAttributeUnit unit) {
         return map[unit];
 }
 
-static char* print_name(char *s, size_t len, guint8 id, const char *k) {
+static char* print_name(char *s, size_t len, uint8_t id, const char *k) {
 
         if (k)
-                g_strlcpy(s, k, len);
+                strncpy(s, k, len);
         else
-                g_snprintf(s, len, "%u", id);
+                snprintf(s, len, "%u", id);
+
+        s[len-1] = 0;
 
         return s;
 
@@ -992,42 +1004,43 @@ static char *print_value(char *s, size_t len, const SkSmartAttributeParsedData *
                 case SK_SMART_ATTRIBUTE_UNIT_MSECONDS:
 
                         if (a->pretty_value >= 1000LLU*60LLU*60LLU*24LLU*365LLU)
-                                g_snprintf(s, len, "%0.1f years", ((double) a->pretty_value)/(1000.0*60*60*24*365));
+                                snprintf(s, len, "%0.1f years", ((double) a->pretty_value)/(1000.0*60*60*24*365));
                         else if (a->pretty_value >= 1000LLU*60LLU*60LLU*24LLU*30LLU)
-                                g_snprintf(s, len, "%0.1f months", ((double) a->pretty_value)/(1000.0*60*60*24*30));
+                                snprintf(s, len, "%0.1f months", ((double) a->pretty_value)/(1000.0*60*60*24*30));
                         else if (a->pretty_value >= 1000LLU*60LLU*60LLU*24LLU)
-                                g_snprintf(s, len, "%0.1f days", ((double) a->pretty_value)/(1000.0*60*60*24));
+                                snprintf(s, len, "%0.1f days", ((double) a->pretty_value)/(1000.0*60*60*24));
                         else if (a->pretty_value >= 1000LLU*60LLU*60LLU)
-                                g_snprintf(s, len, "%0.1f h", ((double) a->pretty_value)/(1000.0*60*60));
+                                snprintf(s, len, "%0.1f h", ((double) a->pretty_value)/(1000.0*60*60));
                         else if (a->pretty_value >= 1000LLU*60LLU)
-                                g_snprintf(s, len, "%0.1f min", ((double) a->pretty_value)/(1000.0*60));
+                                snprintf(s, len, "%0.1f min", ((double) a->pretty_value)/(1000.0*60));
                         else if (a->pretty_value >= 1000LLU)
-                                g_snprintf(s, len, "%0.1f s", ((double) a->pretty_value)/(1000.0));
+                                snprintf(s, len, "%0.1f s", ((double) a->pretty_value)/(1000.0));
                         else
-                                g_snprintf(s, len, "%llu ms", (unsigned long long) a->pretty_value);
+                                snprintf(s, len, "%llu ms", (unsigned long long) a->pretty_value);
 
                         break;
 
                 case SK_SMART_ATTRIBUTE_UNIT_MKELVIN:
-
-                        g_snprintf(s, len, "%0.1f C", ((double) a->pretty_value - 273150) / 1000);
+                        snprintf(s, len, "%0.1f C", ((double) a->pretty_value - 273150) / 1000);
                         break;
 
                 case SK_SMART_ATTRIBUTE_UNIT_SECTORS:
-                        g_snprintf(s, len, "%llu sectors", (unsigned long long) a->pretty_value);
+                        snprintf(s, len, "%llu sectors", (unsigned long long) a->pretty_value);
                         break;
 
                 case SK_SMART_ATTRIBUTE_UNIT_NONE:
-                        g_snprintf(s, len, "%llu", (unsigned long long) a->pretty_value);
+                        snprintf(s, len, "%llu", (unsigned long long) a->pretty_value);
                         break;
 
                 case SK_SMART_ATTRIBUTE_UNIT_UNKNOWN:
-                        g_snprintf(s, len, "n/a");
+                        snprintf(s, len, "n/a");
                         break;
 
                 case _SK_SMART_ATTRIBUTE_UNIT_MAX:
-                        g_assert_not_reached();
+                        assert(FALSE);
         }
+
+        s[len-1] = 0;
 
         return s;
 };
@@ -1035,26 +1048,27 @@ static char *print_value(char *s, size_t len, const SkSmartAttributeParsedData *
 #define HIGHLIGHT "\x1B[1m"
 #define ENDHIGHLIGHT "\x1B[0m"
 
-static void disk_dump_attributes(SkDisk *d, const SkSmartAttributeParsedData *a, gpointer userdata) {
+static void disk_dump_attributes(SkDisk *d, const SkSmartAttributeParsedData *a, void* userdata) {
         char name[32];
         char pretty[32];
         char t[32];
 
-        g_snprintf(t, sizeof(t), "%3u", a->threshold);
+        snprintf(t, sizeof(t), "%3u", a->threshold);
+        t[sizeof(t)-1] = 0;
 
         if (!a->good  && isatty(1))
                 fprintf(stderr, HIGHLIGHT);
 
-        g_print("%3u %-27s %3u   %3u   %-3s   %-11s %-7s %-7s %-3s\n",
-                a->id,
-                print_name(name, sizeof(name), a->id, a->name),
-                a->current_value,
-                a->worst_value,
-                a->threshold_valid ? t : "n/a",
-                print_value(pretty, sizeof(pretty), a),
-                a->prefailure ? "prefail" : "old-age",
-                a->online ? "online" : "offline",
-                yes_no(a->good));
+        printf("%3u %-27s %3u   %3u   %-3s   %-11s %-7s %-7s %-3s\n",
+               a->id,
+               print_name(name, sizeof(name), a->id, a->name),
+               a->current_value,
+               a->worst_value,
+               a->threshold_valid ? t : "n/a",
+               print_value(pretty, sizeof(pretty), a),
+               a->prefailure ? "prefail" : "old-age",
+               a->online ? "online" : "offline",
+               yes_no(a->good));
 
         if (!a->good && isatty(1))
                 fprintf(stderr, ENDHIGHLIGHT);
@@ -1062,12 +1076,12 @@ static void disk_dump_attributes(SkDisk *d, const SkSmartAttributeParsedData *a,
 
 int sk_disk_dump(SkDisk *d) {
         int ret;
-        gboolean awake = FALSE;
+        SkBool awake = FALSE;
 
-        g_print("Device: %s\n"
-                "Size: %lu MiB\n",
-                d->name,
-                (unsigned long) (d->size/1024/1024));
+        printf("Device: %s\n"
+               "Size: %lu MiB\n",
+               d->name,
+               (unsigned long) (d->size/1024/1024));
 
         if (d->identify_data_valid) {
                 const SkIdentifyParsedData *ipd;
@@ -1075,28 +1089,28 @@ int sk_disk_dump(SkDisk *d) {
                 if ((ret = sk_disk_identify_parse(d, &ipd)) < 0)
                         return ret;
 
-                g_print("Model: [%s]\n"
-                        "Serial: [%s]\n"
-                        "Firmware: [%s]\n"
-                        "SMART Available: %s\n",
-                        ipd->model,
-                        ipd->serial,
-                        ipd->firmware,
-                        yes_no(disk_smart_is_available(d)));
+                printf("Model: [%s]\n"
+                       "Serial: [%s]\n"
+                       "Firmware: [%s]\n"
+                       "SMART Available: %s\n",
+                       ipd->model,
+                       ipd->serial,
+                       ipd->firmware,
+                       yes_no(disk_smart_is_available(d)));
         }
 
         ret = sk_disk_check_sleep_mode(d, &awake);
-        g_print("Awake: %s\n",
-                ret >= 0 ? yes_no(awake) : "unknown");
+        printf("Awake: %s\n",
+               ret >= 0 ? yes_no(awake) : "unknown");
 
         if (disk_smart_is_available(d)) {
                 const SkSmartParsedData *spd;
-                gboolean good;
+                SkBool good;
 
                 if ((ret = sk_disk_smart_status(d, &good)) < 0)
                         return ret;
 
-                g_print("Disk Health Good: %s\n",
+                printf("Disk Health Good: %s\n",
                         yes_no(good));
 
                 if ((ret = sk_disk_smart_read_data(d)) < 0)
@@ -1105,39 +1119,39 @@ int sk_disk_dump(SkDisk *d) {
                 if ((ret = sk_disk_smart_parse(d, &spd)) < 0)
                         return ret;
 
-                g_print("Off-line Data Collection Status: [%s]\n"
-                        "Total Time To Complete Off-Line Data Collection: %u s\n"
-                        "Self-Test Execution Status: [%s]\n"
-                        "Percent Self-Test Remaining: %u%%\n"
-                        "Conveyance Self-Test Available: %s\n"
-                        "Short/Extended Self-Test Available: %s\n"
-                        "Start Self-Test Available: %s\n"
-                        "Abort Self-Test Available: %s\n"
-                        "Short Self-Test Polling Time: %u min\n"
-                        "Extended Self-Test Polling Time: %u min\n"
-                        "Conveyance Self-Test Polling Time: %u min\n",
-                        sk_smart_offline_data_collection_status_to_string(spd->offline_data_collection_status),
-                        spd->total_offline_data_collection_seconds,
-                        sk_smart_self_test_execution_status_to_string(spd->self_test_execution_status),
-                        spd->self_test_execution_percent_remaining,
-                        yes_no(spd->conveyance_test_available),
-                        yes_no(spd->short_and_extended_test_available),
-                        yes_no(spd->start_test_available),
-                        yes_no(spd->abort_test_available),
+                printf("Off-line Data Collection Status: [%s]\n"
+                       "Total Time To Complete Off-Line Data Collection: %u s\n"
+                       "Self-Test Execution Status: [%s]\n"
+                       "Percent Self-Test Remaining: %u%%\n"
+                       "Conveyance Self-Test Available: %s\n"
+                       "Short/Extended Self-Test Available: %s\n"
+                       "Start Self-Test Available: %s\n"
+                       "Abort Self-Test Available: %s\n"
+                       "Short Self-Test Polling Time: %u min\n"
+                       "Extended Self-Test Polling Time: %u min\n"
+                       "Conveyance Self-Test Polling Time: %u min\n",
+                       sk_smart_offline_data_collection_status_to_string(spd->offline_data_collection_status),
+                       spd->total_offline_data_collection_seconds,
+                       sk_smart_self_test_execution_status_to_string(spd->self_test_execution_status),
+                       spd->self_test_execution_percent_remaining,
+                       yes_no(spd->conveyance_test_available),
+                       yes_no(spd->short_and_extended_test_available),
+                       yes_no(spd->start_test_available),
+                       yes_no(spd->abort_test_available),
                         spd->short_test_polling_minutes,
-                        spd->extended_test_polling_minutes,
-                        spd->conveyance_test_polling_minutes);
+                       spd->extended_test_polling_minutes,
+                       spd->conveyance_test_polling_minutes);
 
-                g_print("%3s %-27s %5s %5s %5s %-11s %-7s %-7s %-3s\n",
-                        "ID#",
-                        "Name",
-                        "Value",
-                        "Worst",
-                        "Thres",
-                        "Pretty",
-                        "Type",
-                        "Updates",
-                        "Good");
+                printf("%3s %-27s %5s %5s %5s %-11s %-7s %-7s %-3s\n",
+                       "ID#",
+                       "Name",
+                       "Value",
+                       "Worst",
+                       "Thres",
+                       "Pretty",
+                       "Type",
+                       "Updates",
+                       "Good");
 
                 if ((ret = sk_disk_smart_parse_attributes(d, disk_dump_attributes, NULL)) < 0)
                         return ret;
@@ -1146,22 +1160,29 @@ int sk_disk_dump(SkDisk *d) {
         return 0;
 }
 
-int sk_disk_get_size(SkDisk *d, guint64 *bytes) {
+int sk_disk_get_size(SkDisk *d, uint64_t *bytes) {
 
         *bytes = d->size;
         return 0;
 }
 
-int sk_disk_open(const gchar *name, SkDisk **_d) {
+int sk_disk_open(const char *name, SkDisk **_d) {
         SkDisk *d;
         int ret = -1;
         struct stat st;
 
-        g_assert(name);
-        g_assert(_d);
+        assert(name);
+        assert(_d);
 
-        d = g_new0(SkDisk, 1);
-        d->name = g_strdup(name);
+        if (!(d = calloc(1, sizeof(SkDisk)))) {
+                errno = ENOMEM;
+                return -1;
+        }
+
+        if (!(d->name = strdup(name))) {
+                errno = ENOMEM;
+                return -1;
+        }
 
         if ((d->fd = open(name, O_RDWR|O_NOCTTY)) < 0) {
                 ret = d->fd;
@@ -1181,7 +1202,7 @@ int sk_disk_open(const gchar *name, SkDisk **_d) {
         if ((ret = ioctl(d->fd, BLKGETSIZE64, &d->size)) < 0)
                 goto fail;
 
-        if (d->size <= 0 || d->size == (guint64) -1) {
+        if (d->size <= 0 || d->size == (uint64_t) -1) {
                 errno = EIO;
                 goto fail;
         }
@@ -1225,11 +1246,11 @@ fail:
 }
 
 void sk_disk_free(SkDisk *d) {
-        g_assert(d);
+        assert(d);
 
         if (d->fd >= 0)
                 close(d->fd);
 
-        g_free(d->name);
-        g_free(d);
+        free(d->name);
+        free(d);
 }

@@ -20,6 +20,7 @@
     <http://www.gnu.org/licenses/>.
 ***/
 
+#include <stdio.h>
 #include <string.h>
 #include <errno.h>
 
@@ -31,19 +32,19 @@ int main(int argc, char *argv[]) {
         SkDisk *d;
 
         if (argc != 2) {
-                g_printerr("%s [DEVICE]\n", argv[0]);
+                fprintf(stderr, "%s [DEVICE]\n", argv[0]);
                 return 1;
         }
 
         device = argv[1];
 
         if ((ret = sk_disk_open(device, &d)) < 0) {
-                g_printerr("Failed to open disk %s: %s\n", device, g_strerror(errno));
+                fprintf(stderr, "Failed to open disk %s: %s\n", device, strerror(errno));
                 return 1;
         }
 
         if ((ret = sk_disk_dump(d)) < 0) {
-                g_printerr("Failed to dump disk data: %s\n", g_strerror(errno));
+                fprintf(stderr, "Failed to dump disk data: %s\n", strerror(errno));
                 return 1;
         }
 
