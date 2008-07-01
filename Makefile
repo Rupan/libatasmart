@@ -3,10 +3,10 @@ LIBS=
 
 all: skdump sktest
 
-skdump: smart.o skdump.o
+skdump: atasmart.o skdump.o
 	$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
 
-sktest: smart.o sktest.o
+sktest: atasmart.o sktest.o
 	$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
 
 clean:
