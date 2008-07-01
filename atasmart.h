@@ -1,7 +1,7 @@
 /*-*- Mode: C; c-basic-offset: 8 -*-*/
 
-#ifndef foosmarthfoo
-#define foosmarthfoo
+#ifndef fooatasmarthfoo
+#define fooatasmarthfoo
 
 /***
     This file is part of libatasmart.
