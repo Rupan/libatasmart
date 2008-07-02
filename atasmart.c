@@ -1081,13 +1081,14 @@ static void disk_dump_attributes(SkDisk *d, const SkSmartAttributeParsedData *a,
         if (highlight)
                 fprintf(stderr, HIGHLIGHT);
 
-        printf("%3u %-27s %-3s   %-3s   %-3s   %-11s %-7s %-7s %-3s\n",
+        printf("%3u %-27s %-3s   %-3s   %-3s   %-11s 0x%02x%02x%02x%02x%02x%02x %-7s %-7s %-3s\n",
                a->id,
                print_name(name, sizeof(name), a->id, a->name),
                a->current_value_valid ? tc : "n/a",
                a->worst_value_valid ? tw : "n/a",
                a->threshold_valid ? tt : "n/a",
                print_value(pretty, sizeof(pretty), a),
+               a->raw[0], a->raw[1], a->raw[2], a->raw[3], a->raw[4], a->raw[5],
                a->prefailure ? "prefail" : "old-age",
                a->online ? "online" : "offline",
                a->good_valid ? yes_no(a->good) : "n/a");
@@ -1164,13 +1165,14 @@ int sk_disk_dump(SkDisk *d) {
                        spd->extended_test_polling_minutes,
                        spd->conveyance_test_polling_minutes);
 
-                printf("%3s %-27s %5s %5s %5s %-11s %-7s %-7s %-3s\n",
+                printf("%3s %-27s %5s %5s %5s %-11s %-14s %-7s %-7s %-3s\n",
                        "ID#",
                        "Name",
                        "Value",
                        "Worst",
                        "Thres",
                        "Pretty",
+                       "Raw",
                        "Type",
                        "Updates",
                        "Good");
