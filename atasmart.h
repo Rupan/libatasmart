@@ -25,6 +25,10 @@
 
 #include <inttypes.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef int SkBool;
 
 #ifndef FALSE
@@ -169,5 +173,9 @@ int sk_disk_smart_self_test(SkDisk *d, SkSmartSelfTest test);
 int sk_disk_dump(SkDisk *d);
 
 void sk_disk_free(SkDisk *d);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
