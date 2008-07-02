@@ -1067,6 +1067,7 @@ static void disk_dump_attributes(SkDisk *d, const SkSmartAttributeParsedData *a,
         char name[32];
         char pretty[32];
         char tt[32], tw[32], tc[32];
+        SkBool highlight;
 
         snprintf(tt, sizeof(tt), "%3u", a->threshold);
         tt[sizeof(tt)-1] = 0;
@@ -1075,7 +1076,9 @@ static void disk_dump_attributes(SkDisk *d, const SkSmartAttributeParsedData *a,
         snprintf(tc, sizeof(tc), "%3u", a->current_value);
         tc[sizeof(tc)-1] = 0;
 
-        if (!a->good  && isatty(1))
+        highlight = a->good_valid && !a->good && isatty(1);
+
+        if (highlight)
                 fprintf(stderr, HIGHLIGHT);
 
         printf("%3u %-27s %-3s   %-3s   %-3s   %-11s %-7s %-7s %-3s\n",
@@ -1089,7 +1092,7 @@ static void disk_dump_attributes(SkDisk *d, const SkSmartAttributeParsedData *a,
                a->online ? "online" : "offline",
                a->good_valid ? yes_no(a->good) : "n/a");
 
-        if (!a->good && isatty(1))
+        if (highlight)
                 fprintf(stderr, ENDHIGHLIGHT);
 }
 
