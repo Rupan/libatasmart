@@ -137,7 +137,8 @@ typedef struct SkSmartAttributeParsedData {
         SkBool prefailure:1;
 
         /* Volatile data */
-        SkBool good:1;
+        SkBool good:1, good_valid:1;
+        SkBool current_value_valid:1, worst_value_valid:1;
         uint8_t current_value, worst_value;
         uint64_t pretty_value;
         uint8_t raw[6];

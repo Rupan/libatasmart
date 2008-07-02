@@ -899,15 +899,30 @@ static void find_threshold(SkDisk *d, SkSmartAttributeParsedData *a) {
 
         if (n >= 30) {
                 a->threshold_valid = FALSE;
+                a->good_valid = FALSE;
                 return;
         }
 
         a->threshold = p[1];
-        a->threshold_valid = TRUE;
+        a->threshold_valid = p[1] != 0xFE;
 
-        a->good =
-                a->worst_value > a->threshold &&
-                a->current_value > a->threshold;
+        a->good_valid = FALSE;
+        a->good = TRUE;
+
+        /* Always-Fail and Always-Pssing thresholds are not relevant
+         * for our assessment. */
+        if (p[1] >= 1 && p[1] <= 0xFD) {
+
+                if (a->worst_value_valid) {
+                        a->good = a->good && (a->worst_value > a->threshold);
+                        a->good_valid = TRUE;
+                }
+
+                if (a->current_value_valid) {
+                        a->good = a->good && (a->current_value > a->threshold);
+                        a->good_valid = TRUE;
+                }
+        }
 }
 
 int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, void* userdata) {
@@ -930,7 +945,9 @@ int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, 
                 memset(&a, 0, sizeof(a));
                 a.id = p[0];
                 a.current_value = p[3];
+                a.current_value_valid = p[3] >= 1 && p[3] <= 0xFD;
                 a.worst_value = p[4];
+                a.worst_value_valid = p[4] >= 1 && p[4] <= 0xFD;
 
                 a.flags = ((uint16_t) p[2] << 8) | p[1];
                 a.prefailure = !!(p[1] & 1);
@@ -1049,24 +1066,28 @@ static char *print_value(char *s, size_t len, const SkSmartAttributeParsedData *
 static void disk_dump_attributes(SkDisk *d, const SkSmartAttributeParsedData *a, void* userdata) {
         char name[32];
         char pretty[32];
-        char t[32];
+        char tt[32], tw[32], tc[32];
 
-        snprintf(t, sizeof(t), "%3u", a->threshold);
-        t[sizeof(t)-1] = 0;
+        snprintf(tt, sizeof(tt), "%3u", a->threshold);
+        tt[sizeof(tt)-1] = 0;
+        snprintf(tw, sizeof(tw), "%3u", a->worst_value);
+        tw[sizeof(tw)-1] = 0;
+        snprintf(tc, sizeof(tc), "%3u", a->current_value);
+        tc[sizeof(tc)-1] = 0;
 
         if (!a->good  && isatty(1))
                 fprintf(stderr, HIGHLIGHT);
 
-        printf("%3u %-27s %3u   %3u   %-3s   %-11s %-7s %-7s %-3s\n",
+        printf("%3u %-27s %-3s   %-3s   %-3s   %-11s %-7s %-7s %-3s\n",
                a->id,
                print_name(name, sizeof(name), a->id, a->name),
-               a->current_value,
-               a->worst_value,
-               a->threshold_valid ? t : "n/a",
+               a->current_value_valid ? tc : "n/a",
+               a->worst_value_valid ? tw : "n/a",
+               a->threshold_valid ? tt : "n/a",
                print_value(pretty, sizeof(pretty), a),
                a->prefailure ? "prefail" : "old-age",
                a->online ? "online" : "offline",
-               yes_no(a->good));
+               a->good_valid ? yes_no(a->good) : "n/a");
 
         if (!a->good && isatty(1))
                 fprintf(stderr, ENDHIGHLIGHT);
