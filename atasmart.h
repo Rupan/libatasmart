@@ -29,7 +29,7 @@
 extern "C" {
 #endif
 
-typedef int SkBool;
+typedef unsigned SkBool;
 
 #ifndef FALSE
 #define FALSE (0)
