@@ -698,6 +698,12 @@ typedef struct SkSmartAttributeInfo {
         SkSmartAttributeUnit unit;
 } SkSmartAttributeInfo;
 
+#ifndef STRINGPOOL
+#define P(x) x
+#endif
+
+/* %STRINGPOOLSTART% */
+
 /* This data is stolen from smartmontools */
 static const SkSmartAttributeInfo const attribute_info[255] = {
         [1]   = { "raw-read-error-rate",         SK_SMART_ATTRIBUTE_UNIT_NONE },
@@ -748,6 +754,8 @@ static const SkSmartAttributeInfo const attribute_info[255] = {
         [240] = { "head-flying-hours",           SK_SMART_ATTRIBUTE_UNIT_MSECONDS },
         [250] = { "read-error-retry-rate",       SK_SMART_ATTRIBUTE_UNIT_NONE }
 };
+
+/* %STRINGPOOLSTOP% */
 
 static void make_pretty(SkSmartAttributeParsedData *a) {
         uint64_t fourtyeight;

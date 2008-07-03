@@ -32,6 +32,9 @@ bin_PROGRAMS = \
 	skdump \
 	sktest
 
+noinst_PROGRAMS = \
+	strpool
+
 lib_LTLIBRARIES = \
 	libatasmart.la
 
@@ -49,3 +52,6 @@ libatasmart_la_SOURCES = \
 	atasmart.c atasmart.h
 libatasmart_la_LDFLAGS = \
 	-version-info 0:0:0
+
+strpool_SOURCES = \
+	strpool.c
