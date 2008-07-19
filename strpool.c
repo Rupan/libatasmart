@@ -266,7 +266,7 @@ static int parse_oct(const char *t, char *r) {
     return k;
 }
 
-static int parse(FILE *in, struct item **rfirst, char **remain, size_t *remain_size) {
+static int parse(FILE *in, const char *fname, struct item **rfirst, char **remain, size_t *remain_size) {
 
     int enabled = 0;
     enum {
@@ -282,7 +282,12 @@ static int parse(FILE *in, struct item **rfirst, char **remain, size_t *remain_s
     char *cnt = NULL;
     size_t cntl = 0;
     struct item *first = NULL, *last = NULL;
+    unsigned nline = 0;
+    unsigned pool_started_line = 0;
     *rfirst = NULL;
+
+    if (!fname)
+        fname = "<stdin>";
 
     for (;;) {
         char t[1024], *c;
@@ -296,6 +301,8 @@ static int parse(FILE *in, struct item **rfirst, char **remain, size_t *remain_s
             fprintf(stderr, "Failed to read: %s\n", strerror(errno));
             goto fail;
         }
+
+        nline++;
 
         c = t;
 
@@ -343,6 +350,7 @@ static int parse(FILE *in, struct item **rfirst, char **remain, size_t *remain_s
                         r = append(r, &rl, &c, 2);
                     } else if (!strncmp(c, "%STRINGPOOLSTART%", 17)) {
                         enabled = 1;
+                        pool_started_line = nline;
                         r = append(r, &rl, &c, 17);
                     } else if (!strncmp(c, "%STRINGPOOLSTOP%", 16)) {
                         enabled = 0;
@@ -361,6 +369,7 @@ static int parse(FILE *in, struct item **rfirst, char **remain, size_t *remain_s
                         r = append(r, &rl, &c, 1);
                     } else if (!strncmp(c, "%STRINGPOOLSTART%", 17)) {
                         enabled = 1;
+                        pool_started_line = nline;
                         r = append(r, &rl, &c, 17);
                     } else if (!strncmp(c, "%STRINGPOOLSTOP%", 16)) {
                         enabled = 0;
@@ -450,7 +459,7 @@ static int parse(FILE *in, struct item **rfirst, char **remain, size_t *remain_s
                             case 'x': {
                                 int k;
                                 if ((k = parse_hex(c+2, &d)) < 0) {
-                                    fprintf(stderr, "Parse failure: invalid hexadecimal escape sequence.\n");
+                                    fprintf(stderr, "%s:%u: Parse failure: invalid hexadecimal escape sequence.\n", fname, nline);
                                     goto fail;
                                 }
                                 l = 2 + k;
@@ -466,14 +475,14 @@ static int parse(FILE *in, struct item **rfirst, char **remain, size_t *remain_s
                             case '7': {
                                 int k;
                                 if ((k = parse_oct(c+1, &d)) < 0) {
-                                    fprintf(stderr, "Parse failure: invalid octal escape sequence.\n");
+                                    fprintf(stderr, "%s:%u: Parse failure: invalid octal escape sequence.\n", fname, nline);
                                     goto fail;
                                 }
                                 l = 1 + k;
                                 break;
                             }
                             default:
-                                fprintf(stderr, "Parse failure: invalid escape sequence.\n");
+                                fprintf(stderr, "%s:%u: Parse failure: invalid escape sequence.\n", fname, nline);
                                 goto fail;
                         }
 
@@ -484,7 +493,7 @@ static int parse(FILE *in, struct item **rfirst, char **remain, size_t *remain_s
                         } else
                             r = append(r, &rl, &c, l);
                     } else if (*c == 0) {
-                        fprintf(stderr, "Parse failure: multiline strings suck.\n");
+                        fprintf(stderr, "%s:%u: Parse failure: multiline strings suck.\n", fname, nline);
                         goto fail;
                     } else
                         r = append(r, &rl, &c, 1);
@@ -495,12 +504,12 @@ static int parse(FILE *in, struct item **rfirst, char **remain, size_t *remain_s
     }
 
     if (enabled) {
-        fprintf(stderr, "Parse failure: missing %%STRINGPOOLSTOP%%\n");
+        fprintf(stderr, "%s:%u: Parse failure: missing %%STRINGPOOLSTOP%%\n", fname, pool_started_line);
         goto fail;
     }
 
     if (state != STATE_TEXT) {
-        fprintf(stderr, "Parse failure: unexpected EOF.\n");
+        fprintf(stderr, "%s:%u: Parse failure: unexpected EOF.\n", fname, nline);
         goto fail;
     }
 
@@ -522,13 +531,13 @@ fail:
     return -1;
 }
 
-static int process(FILE *in, FILE *out) {
+static int process(FILE *in, FILE *out, const char*ifname) {
 
     struct item *first = NULL;
     char *remain = NULL;
     size_t remain_size = 0;
 
-    if (parse(in, &first, &remain, &remain_size) < 0)
+    if (parse(in, ifname, &first, &remain, &remain_size) < 0)
         return -1;
 
     if (!first)
@@ -579,7 +588,7 @@ int main(int argc, char *argv[]) {
     } else
         out = stdout;
 
-    if (process(in, out) < 0)
+    if (process(in, out, argc > 1 ? argv[1] : NULL) < 0)
         goto finish;
 
     ret = 0;
