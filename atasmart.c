@@ -288,6 +288,8 @@ static int disk_passthrough_command(SkDisk *d, SkAtaCommand command, SkDirection
         cdb[13] = bytes[10] & 0x4F; /* SELECT */
         cdb[14] = (uint8_t) command;
 
+        memset(sense, 0, sizeof(sense));
+
         if ((ret = sg_io(d->fd, direction_map[direction], cdb, sizeof(cdb), data, (size_t) cdb[6] * 512, sense, sizeof(sense))) < 0)
                 return ret;
 
