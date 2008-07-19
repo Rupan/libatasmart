@@ -556,6 +556,10 @@ static int process(FILE *in, FILE *out, const char*ifname) {
                 "#define _P(x) (_strpool_ + ((x) - (const char*) 0))\n"
                 "#endif\n\n");
 
+
+        if (ifname)
+            fprintf(out, "#line 1 \"%s\"\n", ifname);
+
         dump_text(out, first);
         fwrite(remain, 1, remain_size, out);
 
