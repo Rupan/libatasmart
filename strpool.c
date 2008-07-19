@@ -553,7 +553,7 @@ static int process(FILE *in, FILE *out, const char*ifname) {
                 "#define STRPOOL\n"
                 "#endif\n"
                 "#ifndef _P\n"
-                "#define _P(x) (_strpool_ + (unsigned) (x))\n"
+                "#define _P(x) (_strpool_ + ((x) - (const char*) 0))\n"
                 "#endif\n\n");
 
         dump_text(out, first);
