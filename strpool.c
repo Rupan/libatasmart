@@ -585,7 +585,7 @@ int main(int argc, char *argv[]) {
 
     if (argc > 2) {
 
-        if (!(out = fopen(argv[2], "2"))) {
+        if (!(out = fopen(argv[2], "w"))) {
             fprintf(stderr, "Failed to open '%s': %s\n", argv[2], strerror(errno));
             return 1;
         }
