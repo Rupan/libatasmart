@@ -26,7 +26,6 @@ static void free_items(struct item *first) {
 
         first = n;
     }
-
 }
 
 static void find_suffixes(struct item *first) {
@@ -161,8 +160,7 @@ static void dump_pool(FILE *out, struct item *first) {
 
     fprintf(out, "/* Saved %i relocations, saved %i strings (%i b) due to suffix compression. */\n", saved_rel, saved_strings, saved_bytes);
 
-
-    fputs("const static char _strpool_[] =", out);
+    fputs("static const char _strpool_[] =", out);
 
     for (i = first; i; i = i->next) {
 
