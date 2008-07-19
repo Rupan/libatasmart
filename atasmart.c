@@ -43,6 +43,10 @@
 
 #include "atasmart.h"
 
+#ifndef STRPOOL
+#define _P(x) x
+#endif
+
 #define SK_TIMEOUT 2000
 
 typedef enum SkDirection {
@@ -605,6 +609,7 @@ int sk_disk_identify_is_available(SkDisk *d, SkBool *b) {
 
 const char *sk_smart_offline_data_collection_status_to_string(SkSmartOfflineDataCollectionStatus status) {
 
+        /* %STRINGPOOLSTART% */
         static const char* const map[] = {
                 [SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_NEVER] = "Off-line data collection activity was never started.",
                 [SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_SUCCESS] = "Off-line data collection activity was completed without error.",
@@ -614,15 +619,17 @@ const char *sk_smart_offline_data_collection_status_to_string(SkSmartOfflineData
                 [SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_FATAL] = "Off-line data collection activity was aborted by the device with a fatal error.",
                 [SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_UNKNOWN] = "Unknown status"
         };
+        /* %STRINGPOOLSTOP% */
 
         if (status >= _SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_MAX)
                 return NULL;
 
-        return map[status];
+        return _P(map[status]);
 }
 
 const char *sk_smart_self_test_execution_status_to_string(SkSmartSelfTestExecutionStatus status) {
 
+        /* %STRINGPOOLSTART% */
         static const char* const map[] = {
                 [SK_SMART_SELF_TEST_EXECUTION_STATUS_SUCCESS_OR_NEVER] = "The previous self-test routine completed without error or no self-test has ever been run.",
                 [SK_SMART_SELF_TEST_EXECUTION_STATUS_ABORTED] = "The self-test routine was aborted by the host.",
@@ -635,11 +642,12 @@ const char *sk_smart_self_test_execution_status_to_string(SkSmartSelfTestExecuti
                 [SK_SMART_SELF_TEST_EXECUTION_STATUS_ERROR_HANDLING] = "The previous self-test completed having a test element that failed and the device is suspected of having handling damage.",
                 [SK_SMART_SELF_TEST_EXECUTION_STATUS_INPROGRESS] = "Self-test routine in progress"
         };
+        /* %STRINGPOOLSTOP% */
 
         if (status >= _SK_SMART_SELF_TEST_EXECUTION_STATUS_MAX)
                 return NULL;
 
-        return map[status];
+        return _P(map[status]);
 }
 
 const char* sk_smart_self_test_to_string(SkSmartSelfTest test) {
@@ -698,13 +706,9 @@ typedef struct SkSmartAttributeInfo {
         SkSmartAttributeUnit unit;
 } SkSmartAttributeInfo;
 
-#ifndef STRINGPOOL
-#define P(x) x
-#endif
+/* This data is stolen from smartmontools */
 
 /* %STRINGPOOLSTART% */
-
-/* This data is stolen from smartmontools */
 static const SkSmartAttributeInfo const attribute_info[255] = {
         [1]   = { "raw-read-error-rate",         SK_SMART_ATTRIBUTE_UNIT_NONE },
         [2]   = { "throughput-perfomance",       SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
@@ -754,7 +758,6 @@ static const SkSmartAttributeInfo const attribute_info[255] = {
         [240] = { "head-flying-hours",           SK_SMART_ATTRIBUTE_UNIT_MSECONDS },
         [250] = { "read-error-retry-rate",       SK_SMART_ATTRIBUTE_UNIT_NONE }
 };
-
 /* %STRINGPOOLSTOP% */
 
 static void make_pretty(SkSmartAttributeParsedData *a) {
@@ -964,7 +967,7 @@ int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, 
                 memcpy(a.raw, p+5, 6);
 
                 if ((i = lookup_attribute(d, p[0]))) {
-                        a.name = i->name;
+                        a.name = _P(i->name);
                         a.pretty_unit = i->unit;
                 } else {
                         if (asprintf(&an, "attribute-%u", a.id) < 0) {
@@ -994,6 +997,7 @@ static const char *yes_no(SkBool b) {
 
 const char* sk_smart_attribute_unit_to_string(SkSmartAttributeUnit unit) {
 
+        /* %STRINGPOOLSTART% */
         const char * const map[] = {
                 [SK_SMART_ATTRIBUTE_UNIT_UNKNOWN] = NULL,
                 [SK_SMART_ATTRIBUTE_UNIT_NONE] = "",
@@ -1001,11 +1005,12 @@ const char* sk_smart_attribute_unit_to_string(SkSmartAttributeUnit unit) {
                 [SK_SMART_ATTRIBUTE_UNIT_SECTORS] = "sectors",
                 [SK_SMART_ATTRIBUTE_UNIT_MKELVIN] = "mK"
         };
+        /* %STRINGPOOLSTOP% */
 
         if (unit >= _SK_SMART_ATTRIBUTE_UNIT_MAX)
                 return NULL;
 
-        return map[unit];
+        return _P(map[unit]);
 }
 
 static char* print_name(char *s, size_t len, uint8_t id, const char *k) {

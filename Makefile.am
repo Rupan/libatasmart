@@ -16,7 +16,7 @@
 # License along with libatasmart. If not, If not, see
 # <http://www.gnu.org/licenses/>.
 
-EXTRA_DIST = bootstrap.sh LGPL README atasmart.vapi
+EXTRA_DIST = bootstrap.sh LGPL README atasmart.vapi atasmart.c
 SUBDIRS =
 
 MAINTAINERCLEANFILES =
@@ -49,9 +49,15 @@ sktest_LDADD = \
 	libatasmart.la
 
 libatasmart_la_SOURCES = \
-	atasmart.c atasmart.h
+	atasmart.strpool.c atasmart.h
 libatasmart_la_LDFLAGS = \
 	-version-info 0:0:0
 
 strpool_SOURCES = \
 	strpool.c
+
+BUILT_SOURCES = \
+	atasmart.strpool.c
+
+atasmart.strpool.c: atasmart.c strpool
+	$(builddir)/strpool $< $@
