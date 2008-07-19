@@ -814,6 +814,7 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
 
                 case 9: {
 
+                        /* %STRINGPOOLSTART% */
                         static const SkSmartAttributeInfo maxtor = {
                                 "power-on-minutes", SK_SMART_ATTRIBUTE_UNIT_MSECONDS
                         };
@@ -823,6 +824,7 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
                         static const SkSmartAttributeInfo others = {
                                 "power-on-hours", SK_SMART_ATTRIBUTE_UNIT_MSECONDS
                         };
+                        /* %STRINGPOOLSTOP% */
 
                         if (strstr(ipd->model, "Maxtor") || strstr(ipd->model, "MAXTOR"))
                                 return &maxtor;
@@ -1025,7 +1027,6 @@ static char* print_name(char *s, size_t len, uint8_t id, const char *k) {
         s[len-1] = 0;
 
         return s;
-
 }
 
 static char *print_value(char *s, size_t len, const SkSmartAttributeParsedData *a) {
