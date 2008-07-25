@@ -56,7 +56,7 @@ AC_PROG_CXX
 
 test_gcc_flag() {
     AC_LANG_CONFTEST([int main(int argc, char*argv[]) {}])
-    $CC -c conftest.c $CFLAGS -o conftest.o > /dev/null 2> /dev/null
+    $CC -c conftest.c $CFLAGS "$1" -o conftest.o > /dev/null 2> /dev/null
     ret=$?
     rm -f conftest.o
     return $ret
@@ -131,6 +131,4 @@ echo "
     localstatedir:          ${localstatedir}
     Compiler:               ${CC}
     CFLAGS:                 ${CFLAGS}
-    C++-Compiler:           ${CXX}
-    CXXFLAGS:               ${CXXFLAGS}
 "
