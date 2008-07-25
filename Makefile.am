@@ -51,7 +51,7 @@ sktest_LDADD = \
 libatasmart_la_SOURCES = \
 	atasmart.strpool.c atasmart.h
 libatasmart_la_LDFLAGS = \
-	-version-info 0:0:0
+	-version-info $(LIBATASMART_VERSION_INFO)
 
 strpool_SOURCES = \
 	strpool.c
