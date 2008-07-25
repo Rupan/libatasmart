@@ -167,7 +167,9 @@ static void dump_text(FILE *out, struct item *first) {
                 if (i->cnt)
                         fwrite(i->cnt, 1, i->cntl, out);
 
-                fprintf(out, "((const char*) %u)", i->idx);
+                /* We offset all indexes by one, to avoid clashes
+                 * between index 0 and NULL */
+                fprintf(out, "((const char*) %u)", i->idx+1);
         }
 }
 
@@ -579,7 +581,7 @@ static int process(FILE *in, FILE *out, const char*ifname) {
                         "#define STRPOOL\n"
                         "#endif\n"
                         "#ifndef _P\n"
-                        "#define _P(x) (_strpool_ + ((x) - (const char*) 0))\n"
+                        "#define _P(x) (_strpool_ + ((x) - (const char*) 1))\n"
                         "#endif\n\n");
 
 
