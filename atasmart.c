@@ -40,6 +40,8 @@
 #include <scsi/scsi_ioctl.h>
 #include <linux/hdreg.h>
 #include <linux/fs.h>
+#include <sys/types.h>
+#include <regex.h>
 
 #include "atasmart.h"
 
@@ -703,6 +705,45 @@ unsigned sk_smart_self_test_polling_minutes(const SkSmartParsedData *d, SkSmartS
         }
 }
 
+static void make_pretty(SkSmartAttributeParsedData *a) {
+        uint64_t fourtyeight;
+
+        if (!a->name)
+                return;
+
+        if (a->pretty_unit == SK_SMART_ATTRIBUTE_UNIT_UNKNOWN)
+                return;
+
+        fourtyeight =
+                ((uint64_t) a->raw[0]) |
+                (((uint64_t) a->raw[1]) << 8) |
+                (((uint64_t) a->raw[2]) << 16) |
+                (((uint64_t) a->raw[3]) << 24) |
+                (((uint64_t) a->raw[4]) << 32) |
+                (((uint64_t) a->raw[5]) << 40);
+
+        if (!strcmp(a->name, "spin-up-time"))
+                a->pretty_value = fourtyeight & 0xFFFF;
+        else if (!strcmp(a->name, "airflow-temperature-celsius") ||
+                 !strcmp(a->name, "temperature-celsius-1") ||
+                 !strcmp(a->name, "temperature-celsius-2"))
+                a->pretty_value = (fourtyeight & 0xFFFF)*1000 + 273150;
+        else if (!strcmp(a->name, "temperature-centi-celsius"))
+                a->pretty_value = (fourtyeight & 0xFFFF)*100 + 273150;
+        else if (!strcmp(a->name, "power-on-minutes"))
+                a->pretty_value = fourtyeight * 60 * 1000;
+        else if (!strcmp(a->name, "power-on-seconds"))
+                a->pretty_value = fourtyeight * 1000;
+        else if (!strcmp(a->name, "power-on-half-minutes"))
+                a->pretty_value = fourtyeight * 30 * 1000;
+        else if (!strcmp(a->name, "power-on-hours") ||
+                 !strcmp(a->name, "loaded-hours") ||
+                 !strcmp(a->name, "head-flying-hours"))
+                a->pretty_value = fourtyeight * 60 * 60 * 1000;
+        else
+                a->pretty_value = fourtyeight;
+}
+
 typedef struct SkSmartAttributeInfo {
         const char *name;
         SkSmartAttributeUnit unit;
@@ -720,6 +761,7 @@ static const SkSmartAttributeInfo const attribute_info[255] = {
         [6]   = { "read-channel-margin",         SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
         [7]   = { "seek-error-rate",             SK_SMART_ATTRIBUTE_UNIT_NONE },
         [8]   = { "seek-time-perfomance",        SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
+        [9]   = { "power-on-hours",              SK_SMART_ATTRIBUTE_UNIT_MSECONDS },
         [10]  = { "spin-retry-count",            SK_SMART_ATTRIBUTE_UNIT_NONE },
         [11]  = { "calibration-retry-count",     SK_SMART_ATTRIBUTE_UNIT_NONE },
         [12]  = { "power-cycle-count",           SK_SMART_ATTRIBUTE_UNIT_NONE },
@@ -762,78 +804,291 @@ static const SkSmartAttributeInfo const attribute_info[255] = {
 };
 /* %STRINGPOOLSTOP% */
 
-static void make_pretty(SkSmartAttributeParsedData *a) {
-        uint64_t fourtyeight;
+typedef enum SkSmartQuirk {
+        SK_SMART_QUIRK_9_POWERONMINUTES = 1,
+        SK_SMART_QUIRK_9_POWERONSECONDS = 2,
+        SK_SMART_QUIRK_9_POWERONHALFMINUTES = 4,
+        SK_SMART_QUIRK_192_EMERGENCYRETRACTCYCLECT = 8,
+        SK_SMART_QUIRK_193_LOADUNLOAD = 16,
+        SK_SMART_QUIRK_194_10XCELSIUS = 32,
+        SK_SMART_QUIRK_194_UNKNOWN = 64,
+        SK_SMART_QUIRK_200_WRITEERRORCOUNT = 128,
+        SK_SMART_QUIRK_201_DETECTEDTACOUNT = 256,
+} SkSmartQuirk;
 
-        if (!a->name)
-                return;
+/* %STRINGPOOLSTART% */
+static const char *quirk_name[] = {
+        "9_POWERONMINUTES",
+        "9_POWERONSECONDS",
+        "9_POWERONHALFMINUTES",
+        "192_EMERGENCYRETRACTCYCLECT",
+        "193_LOADUNLOAD",
+        "194_10XCELSIUS",
+        "194_UNKNOWN",
+        "200_WRITEERRORCOUNT",
+        "201_DETECTEDTACOUNT",
+        NULL
+};
+/* %STRINGPOOLSTOP% */
 
-        if (a->pretty_unit == SK_SMART_ATTRIBUTE_UNIT_UNKNOWN)
-                return;
+typedef struct SkSmartQuirkDatabase {
+        const char *model;
+        const char *firmware;
+        SkSmartQuirk quirk;
+} SkSmartQuirkDatabase;
 
-        fourtyeight =
-                ((uint64_t) a->raw[0]) |
-                (((uint64_t) a->raw[1]) << 8) |
-                (((uint64_t) a->raw[2]) << 16) |
-                (((uint64_t) a->raw[3]) << 24) |
-                (((uint64_t) a->raw[4]) << 32) |
-                (((uint64_t) a->raw[5]) << 40);
+/* %STRINGPOOLSTART% */
+static const SkSmartQuirkDatabase quirk_database[] = { {
+                "^FUJITSU MHR2040AT$",
+                NULL,
+                SK_SMART_QUIRK_9_POWERONSECONDS|
+                SK_SMART_QUIRK_192_EMERGENCYRETRACTCYCLECT|
+                SK_SMART_QUIRK_200_WRITEERRORCOUNT
+        }, {
+                "^FUJITSU MHS20[6432]0AT(  .)?$",
+                NULL,
+                SK_SMART_QUIRK_9_POWERONSECONDS|
+                SK_SMART_QUIRK_192_EMERGENCYRETRACTCYCLECT|
+                SK_SMART_QUIRK_200_WRITEERRORCOUNT|
+                SK_SMART_QUIRK_201_DETECTEDTACOUNT
 
-        if (!strcmp(a->name, "spin-up-time"))
-                a->pretty_value = fourtyeight & 0xFFFF;
-        else if (!strcmp(a->name, "airflow-temperature-celsius") ||
-                 !strcmp(a->name, "temperature-celsius-1") ||
-                 !strcmp(a->name, "temperature-celsius-2")) {
-                a->pretty_value = (fourtyeight & 0xFFFF)*1000 + 273150;
-        } else if (!strcmp(a->name, "power-on-minutes"))
-                a->pretty_value = fourtyeight * 60 * 1000;
-        else if (!strcmp(a->name, "power-on-seconds"))
-                a->pretty_value = fourtyeight * 1000;
-        else if (!strcmp(a->name, "power-on-hours") ||
-                 !strcmp(a->name, "loaded-hours") ||
-                 !strcmp(a->name, "head-flying-hours"))
-                a->pretty_value = fourtyeight * 60 * 60 * 1000;
-        else
-                a->pretty_value = fourtyeight;
+        }, {
+                "^SAMSUNG SV4012H$",
+                NULL,
+                SK_SMART_QUIRK_9_POWERONHALFMINUTES
+        }, {
+                "^SAMSUNG SV0412H$",
+                NULL,
+                SK_SMART_QUIRK_9_POWERONHALFMINUTES|
+                SK_SMART_QUIRK_194_10XCELSIUS
+        }, {
+                "^SAMSUNG SV1204H$",
+                NULL,
+                SK_SMART_QUIRK_9_POWERONHALFMINUTES|
+                SK_SMART_QUIRK_194_10XCELSIUS
+        }, {
+                "^SAMSUNG SP40A2H$",
+                "^RR100-07$",
+                SK_SMART_QUIRK_9_POWERONHALFMINUTES
+        }, {
+                "^SAMSUNG SP8004H$",
+                "^QW100-61$",
+                SK_SMART_QUIRK_9_POWERONHALFMINUTES
+        }, {
+                "^SAMSUNG",
+                ".*-(2[3-9]|3[0-9])$",
+                SK_SMART_QUIRK_9_POWERONHALFMINUTES
+
+        }, {
+                "^Maxtor 2B0(0[468]|1[05]|20)H1$",
+                NULL,
+                SK_SMART_QUIRK_9_POWERONMINUTES|
+                SK_SMART_QUIRK_194_UNKNOWN
+        }, {
+                "^Maxtor 4G(120J6|160J[68])$",
+                NULL,
+                SK_SMART_QUIRK_9_POWERONMINUTES|
+                SK_SMART_QUIRK_194_UNKNOWN
+        }, {
+                "^Maxtor 4D0(20H1|40H2|60H3|80H4)$",
+                NULL,
+                SK_SMART_QUIRK_9_POWERONMINUTES|
+                SK_SMART_QUIRK_194_UNKNOWN
+
+        }, {
+                "^HITACHI_DK14FA-20B$",
+                NULL,
+                SK_SMART_QUIRK_9_POWERONMINUTES|
+                SK_SMART_QUIRK_193_LOADUNLOAD
+        }, {
+                "^HITACHI_DK23..-..B?$",
+                NULL,
+                SK_SMART_QUIRK_9_POWERONMINUTES|
+                SK_SMART_QUIRK_193_LOADUNLOAD
+        }, {
+                "^(HITACHI_DK23FA-20J|HTA422020F9AT[JN]0)$",
+                NULL,
+                SK_SMART_QUIRK_9_POWERONMINUTES|
+                SK_SMART_QUIRK_193_LOADUNLOAD
+
+        }, {
+                "Maxtor",
+                NULL,
+                SK_SMART_QUIRK_9_POWERONMINUTES
+        }, {
+                "MAXTOR",
+                NULL,
+                SK_SMART_QUIRK_9_POWERONMINUTES
+        }, {
+                "Fujitsu",
+                NULL,
+                SK_SMART_QUIRK_9_POWERONSECONDS
+        }, {
+                "FUJITSU",
+                NULL,
+                SK_SMART_QUIRK_9_POWERONSECONDS
+        }, {
+                NULL,
+                NULL,
+                0
+        }
+};
+/* %STRINGPOOLSTOP% */
+
+static int match(const char*regex, const char *s, SkBool *result) {
+        int k;
+        regex_t re;
+
+        *result = FALSE;
+
+        if (regcomp(&re, regex, REG_EXTENDED|REG_NOSUB) != 0) {
+                errno = EINVAL;
+                return -1;
+        }
+
+        if ((k = regexec(&re, s, 0, NULL, 0)) != 0) {
+
+                if (k != REG_NOMATCH) {
+                        regfree(&re);
+                        errno = EINVAL;
+                        return -1;
+                }
+
+        } else
+                *result = TRUE;
+
+        regfree(&re);
+
+        return 0;
+}
+
+static int lookup_quirks(const char *model, const char *firmware, SkSmartQuirk *quirk) {
+        int k;
+        const SkSmartQuirkDatabase *db;
+
+        *quirk = 0;
+
+        for (db = quirk_database; db->model || db->firmware; db++) {
+
+                if (db->model) {
+                        SkBool matching = FALSE;
+
+                        if ((k = match(_P(db->model), model, &matching)) < 0)
+                                return k;
+
+                        if (!matching)
+                                continue;
+                }
+
+                if (db->firmware) {
+                        SkBool matching = FALSE;
+
+                        if ((k = match(_P(db->firmware), firmware, &matching)) < 0)
+                                return k;
+
+                        if (!matching)
+                                continue;
+                }
+
+                *quirk = db->quirk;
+                return 0;
+        }
+
+        return 0;
 }
 
 static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
         const SkIdentifyParsedData *ipd;
-
-        /* These are the simple cases */
-        if (attribute_info[id].name)
-                return &attribute_info[id];
+        SkSmartQuirk quirk = 0;
 
         /* These are the complex ones */
         if (sk_disk_identify_parse(d, &ipd) < 0)
                 return NULL;
 
-        switch (id) {
-                /* We might want to add further special cases/quirks
-                 * here eventually. */
+        if (lookup_quirks(ipd->model, ipd->firmware, &quirk) < 0)
+                return NULL;
 
-                case 9: {
+        if (quirk) {
+                switch (id) {
 
-                        /* %STRINGPOOLSTART% */
-                        static const SkSmartAttributeInfo maxtor = {
-                                "power-on-minutes", SK_SMART_ATTRIBUTE_UNIT_MSECONDS
-                        };
-                        static const SkSmartAttributeInfo fujitsu = {
-                                "power-on-seconds", SK_SMART_ATTRIBUTE_UNIT_MSECONDS
-                        };
-                        static const SkSmartAttributeInfo others = {
-                                "power-on-hours", SK_SMART_ATTRIBUTE_UNIT_MSECONDS
-                        };
-                        /* %STRINGPOOLSTOP% */
+                        case 9:
+                                /* %STRINGPOOLSTART% */
+                                if (quirk & SK_SMART_QUIRK_9_POWERONMINUTES) {
+                                        static const SkSmartAttributeInfo a = {
+                                                "power-on-minutes", SK_SMART_ATTRIBUTE_UNIT_MSECONDS
+                                        };
+                                        return &a;
 
-                        if (strstr(ipd->model, "Maxtor") || strstr(ipd->model, "MAXTOR"))
-                                return &maxtor;
-                        else if (strstr(ipd->model, "Fujitsu") || strstr(ipd->model, "FUJITSU"))
-                                return &fujitsu;
+                                } else if (quirk & SK_SMART_QUIRK_9_POWERONSECONDS) {
+                                        static const SkSmartAttributeInfo a = {
+                                                "power-on-seconds", SK_SMART_ATTRIBUTE_UNIT_MSECONDS
+                                        };
+                                        return &a;
 
-                        return &others;
+                                } else if (quirk & SK_SMART_QUIRK_9_POWERONHALFMINUTES) {
+                                        static const SkSmartAttributeInfo a = {
+                                                "power-on-half-minutes", SK_SMART_ATTRIBUTE_UNIT_MSECONDS
+                                        };
+                                        return &a;
+                                }
+                                /* %STRINGPOOLSTOP% */
+
+                                break;
+
+                        case 192:
+                                /* %STRINGPOOLSTART% */
+                                if (quirk & SK_SMART_QUIRK_192_EMERGENCYRETRACTCYCLECT) {
+                                        static const SkSmartAttributeInfo a = {
+                                                "emergency-retract-cycle-count", SK_SMART_ATTRIBUTE_UNIT_NONE
+                                        };
+                                        return &a;
+                                }
+                                /* %STRINGPOOLSTOP% */
+
+                                break;
+
+                        case 194:
+                                /* %STRINGPOOLSTART% */
+                                if (quirk & SK_SMART_QUIRK_194_10XCELSIUS) {
+                                        static const SkSmartAttributeInfo a = {
+                                                "temperature-centi-celsius", SK_SMART_ATTRIBUTE_UNIT_MKELVIN
+                                        };
+                                        return &a;
+                                } else if (quirk & SK_SMART_QUIRK_194_UNKNOWN)
+                                        return NULL;
+                                /* %STRINGPOOLSTOP% */
+
+                                break;
+
+                        case 200:
+                                /* %STRINGPOOLSTART% */
+                                if (quirk & SK_SMART_QUIRK_200_WRITEERRORCOUNT) {
+                                        static const SkSmartAttributeInfo a = {
+                                                "write-error-count", SK_SMART_ATTRIBUTE_UNIT_NONE
+                                        };
+                                        return &a;
+                                }
+                                /* %STRINGPOOLSTOP% */
+
+                                break;
+
+                        case 201:
+                                /* %STRINGPOOLSTART% */
+                                if (quirk & SK_SMART_QUIRK_201_DETECTEDTACOUNT) {
+                                        static const SkSmartAttributeInfo a = {
+                                                "detected-ta-count", SK_SMART_ATTRIBUTE_UNIT_NONE
+                                        };
+                                        return &a;
+                                }
+                                /* %STRINGPOOLSTOP% */
+
+                                break;
                 }
         }
+
+        /* These are the simple cases */
+        if (attribute_info[id].name)
+                return &attribute_info[id];
 
         return NULL;
 }
@@ -1124,6 +1379,8 @@ int sk_disk_dump(SkDisk *d) {
 
         if (d->identify_data_valid) {
                 const SkIdentifyParsedData *ipd;
+                SkSmartQuirk quirk = 0;
+                unsigned i;
 
                 if ((ret = sk_disk_identify_parse(d, &ipd)) < 0)
                         return ret;
@@ -1136,6 +1393,18 @@ int sk_disk_dump(SkDisk *d) {
                        ipd->serial,
                        ipd->firmware,
                        yes_no(disk_smart_is_available(d)));
+
+                if ((ret = lookup_quirks(ipd->model, ipd->firmware, &quirk)))
+                        return ret;
+
+                printf("Quirks:");
+
+                for (i = 0; quirk_name[i]; i++)
+                        if (quirk & (1<<i))
+                                printf(" %s", quirk_name[i]);
+
+                printf("\n");
+
         }
 
         ret = sk_disk_check_sleep_mode(d, &awake);
