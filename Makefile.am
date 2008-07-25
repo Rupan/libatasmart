@@ -30,7 +30,7 @@ pkgconfig_DATA = libatasmart.pc
 include_HEADERS = \
 	atasmart.h
 
-bin_PROGRAMS = \
+sbin_PROGRAMS = \
 	skdump \
 	sktest
 
