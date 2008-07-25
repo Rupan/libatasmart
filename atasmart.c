@@ -1401,7 +1401,7 @@ int sk_disk_dump(SkDisk *d) {
 
                 for (i = 0; quirk_name[i]; i++)
                         if (quirk & (1<<i))
-                                printf(" %s", quirk_name[i]);
+                                printf(" %s", _P(quirk_name[i]));
 
                 printf("\n");
 
