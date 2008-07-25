@@ -558,6 +558,7 @@ static void drop_spaces(char *s) {
                         if (*s != ' ') {
                                 prev_space = FALSE;
                                 *(d++) = ' ';
+                                *(d++) = *s;
                         }
                 } else {
                         if (*s == ' ')
