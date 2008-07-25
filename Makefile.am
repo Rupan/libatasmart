@@ -19,6 +19,8 @@
 EXTRA_DIST = bootstrap.sh LGPL README atasmart.vapi atasmart.c
 SUBDIRS =
 
+CLEANFILES = atasmart.strpool.c
+
 MAINTAINERCLEANFILES =
 noinst_DATA =
 
