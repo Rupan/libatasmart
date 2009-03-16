@@ -59,7 +59,8 @@ typedef enum SkDirection {
 } SkDirection;
 
 typedef enum SkDiskType {
-        SK_DISK_TYPE_ATA_PASSTHROUGH, /* ATA passthrough over SCSI transport */
+        SK_DISK_TYPE_ATA_PASSTHROUGH_12, /* ATA passthrough over SCSI, 12-byte version */
+        SK_DISK_TYPE_ATA_PASSTHROUGH_16, /* ATA passthrough over SCSI transport */
         SK_DISK_TYPE_ATA,
         SK_DISK_TYPE_UNKNOWN,
         _SK_DISK_TYPE_MAX
@@ -241,7 +242,7 @@ static int sg_io(int fd, int direction,
         return ioctl(fd, SG_IO, &io_hdr);
 }
 
-static int disk_passthrough_command(SkDisk *d, SkAtaCommand command, SkDirection direction, void* cmd_data, void* data, size_t *len) {
+static int disk_passthrough_16_command(SkDisk *d, SkAtaCommand command, SkDirection direction, void* cmd_data, void* data, size_t *len) {
         uint8_t *bytes = cmd_data;
         uint8_t cdb[16];
         uint8_t sense[32];
@@ -254,7 +255,7 @@ static int disk_passthrough_command(SkDisk *d, SkAtaCommand command, SkDirection
                 [SK_DIRECTION_OUT] = SG_DXFER_TO_DEV
         };
 
-        assert(d->type == SK_DISK_TYPE_ATA_PASSTHROUGH);
+        assert(d->type == SK_DISK_TYPE_ATA_PASSTHROUGH_16);
 
         /* ATA Pass-Through 16 byte command, as described in "T10 04-262r8
          * ATA Command Pass-Through":
@@ -314,11 +315,82 @@ static int disk_passthrough_command(SkDisk *d, SkAtaCommand command, SkDirection
         return ret;
 }
 
+static int disk_passthrough_12_command(SkDisk *d, SkAtaCommand command, SkDirection direction, void* cmd_data, void* data, size_t *len) {
+        uint8_t *bytes = cmd_data;
+        uint8_t cdb[12];
+        uint8_t sense[32];
+        uint8_t *desc = sense+8;
+        int ret;
+
+        static const int direction_map[] = {
+                [SK_DIRECTION_NONE] = SG_DXFER_NONE,
+                [SK_DIRECTION_IN] = SG_DXFER_FROM_DEV,
+                [SK_DIRECTION_OUT] = SG_DXFER_TO_DEV
+        };
+
+        assert(d->type == SK_DISK_TYPE_ATA_PASSTHROUGH_12);
+
+        /* ATA Pass-Through 12 byte command, as described in "T10 04-262r8
+         * ATA Command Pass-Through":
+         * http://www.t10.org/ftp/t10/document.04/04-262r8.pdf */
+
+        memset(cdb, 0, sizeof(cdb));
+
+        cdb[0] = 0xa1; /* OPERATION CODE: 12 byte pass through */
+
+        if (direction == SK_DIRECTION_NONE) {
+                cdb[1] = 3 << 1;   /* PROTOCOL: Non-Data */
+                cdb[2] = 0x20;     /* OFF_LINE=0, CK_COND=1, T_DIR=0, BYT_BLOK=0, T_LENGTH=0 */
+
+        } else if (direction == SK_DIRECTION_IN) {
+                cdb[1] = 4 << 1;   /* PROTOCOL: PIO Data-in */
+                cdb[2] = 0x2e;     /* OFF_LINE=0, CK_COND=1, T_DIR=1, BYT_BLOK=1, T_LENGTH=2 */
+
+        } else if (direction == SK_DIRECTION_OUT) {
+                cdb[1] = 5 << 1;   /* PROTOCOL: PIO Data-Out */
+                cdb[2] = 0x26;     /* OFF_LINE=0, CK_COND=1, T_DIR=0, BYT_BLOK=1, T_LENGTH=2 */
+        }
+
+        cdb[3] = bytes[1]; /* FEATURES */
+        cdb[4] = bytes[3]; /* SECTORS */
+
+        cdb[5] = bytes[9]; /* LBA LOW */
+        cdb[6] = bytes[8]; /* LBA MID */
+        cdb[7] = bytes[7]; /* LBA HIGH */
+
+        cdb[8] = bytes[10] & 0x4F; /* SELECT */
+        cdb[9] = (uint8_t) command;
+
+        memset(sense, 0, sizeof(sense));
+
+        if ((ret = sg_io(d->fd, direction_map[direction], cdb, sizeof(cdb), data, (size_t) cdb[4] * 512, sense, sizeof(sense))) < 0)
+                return ret;
+
+        if (sense[0] != 0x72 || desc[0] != 0x9 || desc[1] != 0x0c) {
+                errno = EIO;
+                return -1;
+        }
+
+        memset(bytes, 0, 12);
+
+        bytes[1] = desc[3];
+        bytes[2] = desc[4];
+        bytes[3] = desc[5];
+        bytes[9] = desc[7];
+        bytes[8] = desc[9];
+        bytes[7] = desc[11];
+        bytes[10] = desc[12];
+        bytes[11] = desc[13];
+
+        return ret;
+}
+
 static int disk_command(SkDisk *d, SkAtaCommand command, SkDirection direction, void* cmd_data, void* data, size_t *len) {
 
         static int (* const disk_command_table[_SK_DISK_TYPE_MAX]) (SkDisk *d, SkAtaCommand command, SkDirection direction, void* cmd_data, void* data, size_t *len) = {
                 [SK_DISK_TYPE_ATA] = disk_ata_command,
-                [SK_DISK_TYPE_ATA_PASSTHROUGH] = disk_passthrough_command,
+                [SK_DISK_TYPE_ATA_PASSTHROUGH_12] = disk_passthrough_12_command,
+                [SK_DISK_TYPE_ATA_PASSTHROUGH_16] = disk_passthrough_16_command
         };
 
         assert(d);
@@ -470,7 +542,7 @@ int sk_disk_smart_status(SkDisk *d, SkBool *good) {
             cmd[4] == htons(0x4F00U))
                 *good = TRUE;
         else if (cmd[3] == htons(0x002CU) &&
-            cmd[4] == htons(0xF400U))
+                 cmd[4] == htons(0xF400U))
                 *good = FALSE;
         else {
                 errno = EIO;
@@ -1420,7 +1492,7 @@ int sk_disk_dump(SkDisk *d) {
                         return ret;
 
                 printf("Disk Health Good: %s\n",
-                        yes_no(good));
+                       yes_no(good));
 
                 if ((ret = sk_disk_smart_read_data(d)) < 0)
                         return ret;
@@ -1447,7 +1519,7 @@ int sk_disk_dump(SkDisk *d) {
                        yes_no(spd->short_and_extended_test_available),
                        yes_no(spd->start_test_available),
                        yes_no(spd->abort_test_available),
-                        spd->short_test_polling_minutes,
+                       spd->short_test_polling_minutes,
                        spd->extended_test_polling_minutes,
                        spd->conveyance_test_polling_minutes);
 
