@@ -1361,6 +1361,152 @@ const char* sk_smart_attribute_unit_to_string(SkSmartAttributeUnit unit) {
         return _P(map[unit]);
 }
 
+
+struct attr_helper {
+        uint64_t *value;
+        SkBool found;
+};
+
+static void temperature_cb(SkDisk *d, const SkSmartAttributeParsedData *a, struct attr_helper *ah) {
+
+        if (a->pretty_unit != SK_SMART_ATTRIBUTE_UNIT_MKELVIN)
+                return;
+
+        if (!strcmp(a->name, "temperature-centi-celsius") ||
+            !strcmp(a->name, "temperature-celsius-1") ||
+            !strcmp(a->name, "temperature-celsius-2") ||
+            !strcmp(a->name, "airflow-temperature-celsius")) {
+
+                if (!ah->found || a->pretty_value > *ah->value)
+                        *ah->value = a->pretty_value;
+
+                ah->found = TRUE;
+        }
+}
+
+int sk_disk_smart_get_temperature(SkDisk *d, uint64_t *kelvin) {
+        struct attr_helper ah;
+        int r;
+
+        assert(d);
+        assert(kelvin);
+
+        ah.found = FALSE;
+        ah.value = kelvin;
+
+        if ((r = sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) temperature_cb, &ah)) < 0)
+                return r;
+
+        if (!ah.found) {
+                errno = ENOENT;
+                return -1;
+        }
+
+        return 0;
+}
+
+static void power_on_cb(SkDisk *d, const SkSmartAttributeParsedData *a, struct attr_helper *ah) {
+
+        if (a->pretty_unit != SK_SMART_ATTRIBUTE_UNIT_MSECONDS)
+                return;
+
+        if (!strcmp(a->name, "power-on-minutes") ||
+            !strcmp(a->name, "power-on-seconds") ||
+            !strcmp(a->name, "power-on-half-minutes") ||
+            !strcmp(a->name, "power-on-hours")) {
+
+                if (!ah->found || a->pretty_value > *ah->value)
+                        *ah->value = a->pretty_value;
+
+                ah->found = TRUE;
+        }
+}
+
+int sk_disk_smart_get_power_on(SkDisk *d, uint64_t *mseconds) {
+        struct attr_helper ah;
+        int r;
+
+        assert(d);
+        assert(mseconds);
+
+        ah.found = FALSE;
+        ah.value = mseconds;
+
+        if ((r = sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) power_on_cb, &ah)) < 0)
+                return r;
+
+        if (!ah.found) {
+                errno = ENOENT;
+                return -1;
+        }
+
+        return 0;
+}
+
+static void reallocated_cb(SkDisk *d, const SkSmartAttributeParsedData *a, struct attr_helper *ah) {
+
+        if (a->pretty_unit != SK_SMART_ATTRIBUTE_UNIT_SECTORS)
+                return;
+
+        if (!strcmp(a->name, "reallocated-sector-count") ||
+            !strcmp(a->name, "reallocated-event-count")) {
+
+                if (!ah->found || a->pretty_value > *ah->value)
+                        *ah->value = a->pretty_value;
+
+                ah->found = TRUE;
+        }
+}
+
+static void pending_cb(SkDisk *d, const SkSmartAttributeParsedData *a, struct attr_helper *ah) {
+
+        if (a->pretty_unit != SK_SMART_ATTRIBUTE_UNIT_SECTORS)
+                return;
+
+        if (!strcmp(a->name, "current-pending-sector")) {
+
+                if (!ah->found || a->pretty_value > *ah->value)
+                        *ah->value = a->pretty_value;
+
+                ah->found = TRUE;
+        }
+}
+
+int sk_disk_smart_get_bad(SkDisk *d, uint64_t *sectors) {
+        struct attr_helper ah1, ah2;
+        uint64_t sectors1, sectors2;
+        int r;
+
+        assert(d);
+        assert(sectors);
+
+        ah1.found = FALSE;
+        ah1.value = &sectors1;
+
+        if ((r = sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) reallocated_cb, &ah1)) < 0)
+                return r;
+
+        ah2.found = FALSE;
+        ah2.value = &sectors2;
+
+        if ((r = sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) pending_cb, &ah2)) < 0)
+                return r;
+
+        if (!ah1.found && !ah2.found) {
+                errno = ENOENT;
+                return -1;
+        }
+
+        if (ah1.found && ah2.found)
+                *sectors = sectors1 + sectors2;
+        else if (ah1.found)
+                *sectors = sectors1;
+        else
+                *sectors = sectors2;
+
+        return 0;
+}
+
 static char* print_name(char *s, size_t len, uint8_t id, const char *k) {
 
         if (k)
@@ -1373,38 +1519,38 @@ static char* print_name(char *s, size_t len, uint8_t id, const char *k) {
         return s;
 }
 
-static char *print_value(char *s, size_t len, const SkSmartAttributeParsedData *a) {
+static char *print_value(char *s, size_t len, uint64_t pretty_value, SkSmartAttributeUnit pretty_unit) {
 
-        switch (a->pretty_unit) {
+        switch (pretty_unit) {
                 case SK_SMART_ATTRIBUTE_UNIT_MSECONDS:
 
-                        if (a->pretty_value >= 1000LLU*60LLU*60LLU*24LLU*365LLU)
-                                snprintf(s, len, "%0.1f years", ((double) a->pretty_value)/(1000.0*60*60*24*365));
-                        else if (a->pretty_value >= 1000LLU*60LLU*60LLU*24LLU*30LLU)
-                                snprintf(s, len, "%0.1f months", ((double) a->pretty_value)/(1000.0*60*60*24*30));
-                        else if (a->pretty_value >= 1000LLU*60LLU*60LLU*24LLU)
-                                snprintf(s, len, "%0.1f days", ((double) a->pretty_value)/(1000.0*60*60*24));
-                        else if (a->pretty_value >= 1000LLU*60LLU*60LLU)
-                                snprintf(s, len, "%0.1f h", ((double) a->pretty_value)/(1000.0*60*60));
-                        else if (a->pretty_value >= 1000LLU*60LLU)
-                                snprintf(s, len, "%0.1f min", ((double) a->pretty_value)/(1000.0*60));
-                        else if (a->pretty_value >= 1000LLU)
-                                snprintf(s, len, "%0.1f s", ((double) a->pretty_value)/(1000.0));
+                        if (pretty_value >= 1000LLU*60LLU*60LLU*24LLU*365LLU)
+                                snprintf(s, len, "%0.1f years", ((double) pretty_value)/(1000.0*60*60*24*365));
+                        else if (pretty_value >= 1000LLU*60LLU*60LLU*24LLU*30LLU)
+                                snprintf(s, len, "%0.1f months", ((double) pretty_value)/(1000.0*60*60*24*30));
+                        else if (pretty_value >= 1000LLU*60LLU*60LLU*24LLU)
+                                snprintf(s, len, "%0.1f days", ((double) pretty_value)/(1000.0*60*60*24));
+                        else if (pretty_value >= 1000LLU*60LLU*60LLU)
+                                snprintf(s, len, "%0.1f h", ((double) pretty_value)/(1000.0*60*60));
+                        else if (pretty_value >= 1000LLU*60LLU)
+                                snprintf(s, len, "%0.1f min", ((double) pretty_value)/(1000.0*60));
+                        else if (pretty_value >= 1000LLU)
+                                snprintf(s, len, "%0.1f s", ((double) pretty_value)/(1000.0));
                         else
-                                snprintf(s, len, "%llu ms", (unsigned long long) a->pretty_value);
+                                snprintf(s, len, "%llu ms", (unsigned long long) pretty_value);
 
                         break;
 
                 case SK_SMART_ATTRIBUTE_UNIT_MKELVIN:
-                        snprintf(s, len, "%0.1f C", ((double) a->pretty_value - 273150) / 1000);
+                        snprintf(s, len, "%0.1f C", ((double) pretty_value - 273150) / 1000);
                         break;
 
                 case SK_SMART_ATTRIBUTE_UNIT_SECTORS:
-                        snprintf(s, len, "%llu sectors", (unsigned long long) a->pretty_value);
+                        snprintf(s, len, "%llu sectors", (unsigned long long) pretty_value);
                         break;
 
                 case SK_SMART_ATTRIBUTE_UNIT_NONE:
-                        snprintf(s, len, "%llu", (unsigned long long) a->pretty_value);
+                        snprintf(s, len, "%llu", (unsigned long long) pretty_value);
                         break;
 
                 case SK_SMART_ATTRIBUTE_UNIT_UNKNOWN:
@@ -1447,7 +1593,7 @@ static void disk_dump_attributes(SkDisk *d, const SkSmartAttributeParsedData *a,
                a->current_value_valid ? tc : "n/a",
                a->worst_value_valid ? tw : "n/a",
                a->threshold_valid ? tt : "n/a",
-               print_value(pretty, sizeof(pretty), a),
+               print_value(pretty, sizeof(pretty), a->pretty_value, a->pretty_unit),
                a->raw[0], a->raw[1], a->raw[2], a->raw[3], a->raw[4], a->raw[5],
                a->prefailure ? "prefail" : "old-age",
                a->online ? "online" : "offline",
@@ -1505,6 +1651,8 @@ int sk_disk_dump(SkDisk *d) {
         if (disk_smart_is_available(d)) {
                 const SkSmartParsedData *spd;
                 SkBool good;
+                char pretty[32];
+                uint64_t value;
 
                 if ((ret = sk_disk_smart_status(d, &good)) < 0)
                         return ret;
@@ -1540,6 +1688,21 @@ int sk_disk_dump(SkDisk *d) {
                        spd->short_test_polling_minutes,
                        spd->extended_test_polling_minutes,
                        spd->conveyance_test_polling_minutes);
+
+                if (sk_disk_smart_get_bad(d, &value) < 0)
+                        printf("Bad Sectors: %s\n", strerror(errno));
+                else
+                        printf("Bad Sectors: %s\n", print_value(pretty, sizeof(pretty), value, SK_SMART_ATTRIBUTE_UNIT_SECTORS));
+
+                if (sk_disk_smart_get_power_on(d, &value) < 0)
+                        printf("Powered On: %s\n", strerror(errno));
+                else
+                        printf("Powered On: %s\n", print_value(pretty, sizeof(pretty), value, SK_SMART_ATTRIBUTE_UNIT_MSECONDS));
+
+                if (sk_disk_smart_get_temperature(d, &value) < 0)
+                        printf("Temperature: %s\n", strerror(errno));
+                else
+                        printf("Temperature: %s\n", print_value(pretty, sizeof(pretty), value, SK_SMART_ATTRIBUTE_UNIT_MKELVIN));
 
                 printf("%3s %-27s %5s %5s %5s %-11s %-14s %-7s %-7s %-3s\n",
                        "ID#",

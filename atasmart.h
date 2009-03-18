@@ -171,6 +171,15 @@ int sk_disk_smart_parse(SkDisk *d, const SkSmartParsedData **data);
 int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, void* userdata);
 int sk_disk_smart_self_test(SkDisk *d, SkSmartSelfTest test);
 
+/* High level API to get the power on time */
+int sk_disk_smart_get_power_on(SkDisk *d, uint64_t *mseconds);
+
+/* High level API to get the number of bad sectors (i.e. pending and reallocated) */
+int sk_disk_smart_get_bad(SkDisk *d, uint64_t *sectors);
+
+/* High level API to get the temperature */
+int sk_disk_smart_get_temperature(SkDisk *d, uint64_t *kelvin);
+
 int sk_disk_dump(SkDisk *d);
 
 void sk_disk_free(SkDisk *d);
