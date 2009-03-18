@@ -103,6 +103,22 @@ typedef enum SkSmartCommand {
         SK_SMART_COMMAND_RETURN_STATUS = 0xDA
 } SkSmartCommand;
 
+static const char *disk_type_to_string(SkDiskType type) {
+
+        /* %STRINGPOOLSTART% */
+        static const char* const map[_SK_DISK_TYPE_MAX] = {
+                [SK_DISK_TYPE_ATA_PASSTHROUGH_16] = "16 Byte SCSI ATA SAT Passthru",
+                [SK_DISK_TYPE_ATA_PASSTHROUGH_12] = "12 Byte SCSI ATA SAT Passthru",
+                [SK_DISK_TYPE_ATA] = "Native ATA",
+        };
+        /* %STRINGPOOLSTOP% */
+
+        if (type >= _SK_DISK_TYPE_MAX)
+                return NULL;
+
+        return _P(map[type]);
+}
+
 static SkBool disk_smart_is_available(SkDisk *d) {
         return d->identify_data_valid && !!(d->identify[164] & 1);
 }
@@ -1446,9 +1462,11 @@ int sk_disk_dump(SkDisk *d) {
         SkBool awake = FALSE;
 
         printf("Device: %s\n"
-               "Size: %lu MiB\n",
+               "Size: %lu MiB\n"
+               "Type: %s\n",
                d->name,
-               (unsigned long) (d->size/1024/1024));
+               (unsigned long) (d->size/1024/1024),
+               disk_type_to_string(d->type));
 
         if (d->identify_data_valid) {
                 const SkIdentifyParsedData *ipd;
