@@ -62,4 +62,4 @@ BUILT_SOURCES = \
 	atasmart.strpool.c
 
 atasmart.strpool.c: atasmart.c strpool
-	$(builddir)/strpool $< $@
+	$(top_builddir)/strpool $< $@
