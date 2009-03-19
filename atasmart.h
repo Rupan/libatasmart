@@ -25,6 +25,10 @@
 
 #include <inttypes.h>
 
+/* Please note that all enums defined here may be extended at any time
+ * without this being considered an ABI change. So take care when
+ * using them as indexes! */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -149,6 +153,16 @@ typedef struct SkSmartAttributeParsedData {
 
 typedef struct SkDisk SkDisk;
 
+typedef enum SkSmartOverall  {
+        SK_SMART_OVERALL_GOOD,
+        SK_SMART_OVERALL_BAD_STATUS,     /* Smart Self Assessment negative */
+        SK_SMART_OVERALL_BAD_SECTOR,     /* At least one bad sector */
+        SK_SMART_OVERALL_BAD_ATTRIBUTE,  /* At least one attribute exceeded its threshold */
+        _SK_SMART_OVERALL_MAX
+} SkSmartOverall;
+
+const char* sk_smart_overall_to_string(SkSmartOverall overall);
+
 int sk_disk_open(const char *name, SkDisk **d);
 
 int sk_disk_get_size(SkDisk *d, uint64_t *bytes);
@@ -162,6 +176,7 @@ typedef void (*SkSmartAttributeParseCallback)(SkDisk *d, const SkSmartAttributeP
 
 int sk_disk_smart_is_available(SkDisk *d, SkBool *available);
 int sk_disk_smart_status(SkDisk *d, SkBool *good);
+
 /* Reading SMART data might cause the disk to wake up from
  * sleep. Hence from monitoring daemons make sure to call
  * sk_disk_check_power_mode() to check wether the disk is sleeping and
@@ -179,6 +194,9 @@ int sk_disk_smart_get_bad(SkDisk *d, uint64_t *sectors);
 
 /* High level API to get the temperature */
 int sk_disk_smart_get_temperature(SkDisk *d, uint64_t *kelvin);
+
+/* Get overall status. This integrates the values of a couple of fields into a single overall status */
+int sk_disk_smart_get_overall(SkDisk *d, SkSmartOverall *overall);
 
 int sk_disk_dump(SkDisk *d);
 

@@ -1361,7 +1361,6 @@ const char* sk_smart_attribute_unit_to_string(SkSmartAttributeUnit unit) {
         return _P(map[unit]);
 }
 
-
 struct attr_helper {
         uint64_t *value;
         SkBool found;
@@ -1386,7 +1385,6 @@ static void temperature_cb(SkDisk *d, const SkSmartAttributeParsedData *a, struc
 
 int sk_disk_smart_get_temperature(SkDisk *d, uint64_t *kelvin) {
         struct attr_helper ah;
-        int r;
 
         assert(d);
         assert(kelvin);
@@ -1394,8 +1392,8 @@ int sk_disk_smart_get_temperature(SkDisk *d, uint64_t *kelvin) {
         ah.found = FALSE;
         ah.value = kelvin;
 
-        if ((r = sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) temperature_cb, &ah)) < 0)
-                return r;
+        if (sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) temperature_cb, &ah) < 0)
+                return -1;
 
         if (!ah.found) {
                 errno = ENOENT;
@@ -1424,7 +1422,6 @@ static void power_on_cb(SkDisk *d, const SkSmartAttributeParsedData *a, struct a
 
 int sk_disk_smart_get_power_on(SkDisk *d, uint64_t *mseconds) {
         struct attr_helper ah;
-        int r;
 
         assert(d);
         assert(mseconds);
@@ -1432,8 +1429,8 @@ int sk_disk_smart_get_power_on(SkDisk *d, uint64_t *mseconds) {
         ah.found = FALSE;
         ah.value = mseconds;
 
-        if ((r = sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) power_on_cb, &ah)) < 0)
-                return r;
+        if (sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) power_on_cb, &ah) < 0)
+                return -1;
 
         if (!ah.found) {
                 errno = ENOENT;
@@ -1475,7 +1472,6 @@ static void pending_cb(SkDisk *d, const SkSmartAttributeParsedData *a, struct at
 int sk_disk_smart_get_bad(SkDisk *d, uint64_t *sectors) {
         struct attr_helper ah1, ah2;
         uint64_t sectors1, sectors2;
-        int r;
 
         assert(d);
         assert(sectors);
@@ -1483,14 +1479,14 @@ int sk_disk_smart_get_bad(SkDisk *d, uint64_t *sectors) {
         ah1.found = FALSE;
         ah1.value = &sectors1;
 
-        if ((r = sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) reallocated_cb, &ah1)) < 0)
-                return r;
+        if (sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) reallocated_cb, &ah1) < 0)
+                return -1;
 
         ah2.found = FALSE;
         ah2.value = &sectors2;
 
-        if ((r = sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) pending_cb, &ah2)) < 0)
-                return r;
+        if (sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) pending_cb, &ah2) < 0)
+                return -1;
 
         if (!ah1.found && !ah2.found) {
                 errno = ENOENT;
@@ -1504,6 +1500,64 @@ int sk_disk_smart_get_bad(SkDisk *d, uint64_t *sectors) {
         else
                 *sectors = sectors2;
 
+        return 0;
+}
+
+const char* sk_smart_overall_to_string(SkSmartOverall overall) {
+
+        /* %STRINGPOOLSTART% */
+        const char * const map[] = {
+                [SK_SMART_OVERALL_GOOD] = "GOOD",
+                [SK_SMART_OVERALL_BAD_STATUS] = "BAD_STATUS",
+                [SK_SMART_OVERALL_BAD_ATTRIBUTE] = "BAD_ATTRIBUTE",
+                [SK_SMART_OVERALL_BAD_SECTOR] = "BAD_SECTOR"
+        };
+        /* %STRINGPOOLSTOP% */
+
+        if (overall >= _SK_SMART_OVERALL_MAX)
+                return NULL;
+
+        return _P(map[overall]);
+}
+
+static void bad_attribute_cb(SkDisk *d, const SkSmartAttributeParsedData *a, SkBool *good) {
+        if (a->good_valid && !a->good)
+                *good = FALSE;
+}
+
+int sk_disk_smart_get_overall(SkDisk *d, SkSmartOverall *overall) {
+        SkBool good;
+        uint64_t sectors;
+
+        assert(d);
+        assert(overall);
+
+        if (sk_disk_smart_status(d, &good) < 0)
+                return -1;
+
+        if (!good) {
+                *overall = SK_SMART_OVERALL_BAD_STATUS;
+                return 0;
+        }
+
+        if (sk_disk_smart_get_bad(d, &sectors) < 0) {
+                if (errno != ENOENT)
+                        return -1;
+        } else if (sectors > 0) {
+                *overall = SK_SMART_OVERALL_BAD_SECTOR;
+                return 0;
+        }
+
+        good = TRUE;
+        if (sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) bad_attribute_cb, &good) < 0)
+                return -1;
+
+        if (!good) {
+                *overall = SK_SMART_OVERALL_BAD_ATTRIBUTE;
+                return 0;
+        }
+
+        *overall = SK_SMART_OVERALL_GOOD;
         return 0;
 }
 
@@ -1649,6 +1703,7 @@ int sk_disk_dump(SkDisk *d) {
                ret >= 0 ? yes_no(awake) : "unknown");
 
         if (disk_smart_is_available(d)) {
+                SkSmartOverall overall;
                 const SkSmartParsedData *spd;
                 SkBool good;
                 char pretty[32];
@@ -1657,7 +1712,7 @@ int sk_disk_dump(SkDisk *d) {
                 if ((ret = sk_disk_smart_status(d, &good)) < 0)
                         return ret;
 
-                printf("Disk Health Good: %s\n",
+                printf("SMART Disk Health Good: %s\n",
                        yes_no(good));
 
                 if ((ret = sk_disk_smart_read_data(d)) < 0)
@@ -1692,7 +1747,10 @@ int sk_disk_dump(SkDisk *d) {
                 if (sk_disk_smart_get_bad(d, &value) < 0)
                         printf("Bad Sectors: %s\n", strerror(errno));
                 else
-                        printf("Bad Sectors: %s\n", print_value(pretty, sizeof(pretty), value, SK_SMART_ATTRIBUTE_UNIT_SECTORS));
+                        printf("%sBad Sectors: %s%s\n",
+                               value > 0 ? HIGHLIGHT : "",
+                               print_value(pretty, sizeof(pretty), value, SK_SMART_ATTRIBUTE_UNIT_SECTORS),
+                               value > 0 ? ENDHIGHLIGHT : "");
 
                 if (sk_disk_smart_get_power_on(d, &value) < 0)
                         printf("Powered On: %s\n", strerror(errno));
@@ -1703,6 +1761,14 @@ int sk_disk_dump(SkDisk *d) {
                         printf("Temperature: %s\n", strerror(errno));
                 else
                         printf("Temperature: %s\n", print_value(pretty, sizeof(pretty), value, SK_SMART_ATTRIBUTE_UNIT_MKELVIN));
+
+                if ((ret = sk_disk_smart_get_overall(d, &overall)) < 0)
+                        return ret;
+
+                printf("%sOverall Status: %s%s\n",
+                       overall != SK_SMART_OVERALL_GOOD ? HIGHLIGHT : "",
+                       sk_smart_overall_to_string(overall),
+                       overall != SK_SMART_OVERALL_GOOD ? ENDHIGHLIGHT : "");
 
                 printf("%3s %-27s %5s %5s %5s %-11s %-14s %-7s %-7s %-3s\n",
                        "ID#",
