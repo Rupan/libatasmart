@@ -1331,6 +1331,16 @@ int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, 
 
                 find_threshold(d, &a);
 
+                /* Handle a few fields specially */
+                if ((!strcmp(a.name, "reallocated-sector-count") ||
+                     !strcmp(a.name, "reallocated-event-count") ||
+                     !strcmp(a.name, "current-pending-sector")) &&
+                    a.pretty_unit == SK_SMART_ATTRIBUTE_UNIT_SECTORS &&
+                    a.pretty_value > 0) {
+                        a.good = FALSE;
+                        a.good_valid = TRUE;
+                }
+
                 cb(d, &a, userdata);
 
                 free(an);
