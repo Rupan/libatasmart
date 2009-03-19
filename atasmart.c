@@ -814,7 +814,7 @@ static void make_pretty(SkSmartAttributeParsedData *a) {
         if (!strcmp(a->name, "spin-up-time"))
                 a->pretty_value = fourtyeight & 0xFFFF;
         else if (!strcmp(a->name, "airflow-temperature-celsius") ||
-                 !strcmp(a->name, "temperature-celsius-1") ||
+                 !strcmp(a->name, "temperature-celsius") ||
                  !strcmp(a->name, "temperature-celsius-2"))
                 a->pretty_value = (fourtyeight & 0xFFFF)*1000 + 273150;
         else if (!strcmp(a->name, "temperature-centi-celsius"))
@@ -859,8 +859,8 @@ static const SkSmartAttributeInfo const attribute_info[255] = {
         [189] = { "high-fly-writes",             SK_SMART_ATTRIBUTE_UNIT_NONE },
         [190] = { "airflow-temperature-celsius", SK_SMART_ATTRIBUTE_UNIT_MKELVIN },
         [191] = { "g-sense-error-rate",          SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [192] = { "power-off-retract-count-1",   SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [193] = { "load-cycle-count-1",          SK_SMART_ATTRIBUTE_UNIT_NONE },
+        [192] = { "power-off-retract-count",     SK_SMART_ATTRIBUTE_UNIT_NONE },
+        [193] = { "load-cycle-count",            SK_SMART_ATTRIBUTE_UNIT_NONE },
         [194] = { "temperature-celsius-2",       SK_SMART_ATTRIBUTE_UNIT_MKELVIN },
         [195] = { "hardware-ecc-recovered",      SK_SMART_ATTRIBUTE_UNIT_NONE },
         [196] = { "reallocated-event-count",     SK_SMART_ATTRIBUTE_UNIT_SECTORS },
@@ -887,7 +887,7 @@ static const SkSmartAttributeInfo const attribute_info[255] = {
         [227] = { "torq-amp-count",              SK_SMART_ATTRIBUTE_UNIT_NONE },
         [228] = { "power-off-retract-count-2",   SK_SMART_ATTRIBUTE_UNIT_NONE },
         [230] = { "head-amplitude",              SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
-        [231] = { "temperature-celsius-1",       SK_SMART_ATTRIBUTE_UNIT_MKELVIN },
+        [231] = { "temperature-celsius",         SK_SMART_ATTRIBUTE_UNIT_MKELVIN },
         [240] = { "head-flying-hours",           SK_SMART_ATTRIBUTE_UNIT_MSECONDS },
         [250] = { "read-error-retry-rate",       SK_SMART_ATTRIBUTE_UNIT_NONE }
 };
@@ -1372,7 +1372,7 @@ static void temperature_cb(SkDisk *d, const SkSmartAttributeParsedData *a, struc
                 return;
 
         if (!strcmp(a->name, "temperature-centi-celsius") ||
-            !strcmp(a->name, "temperature-celsius-1") ||
+            !strcmp(a->name, "temperature-celsius") ||
             !strcmp(a->name, "temperature-celsius-2") ||
             !strcmp(a->name, "airflow-temperature-celsius")) {
 
