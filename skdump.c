@@ -20,35 +20,277 @@
     <http://www.gnu.org/licenses/>.
 ***/
 
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <getopt.h>
 
 #include "atasmart.h"
 
+enum {
+        MODE_DUMP = 10,
+        MODE_OVERALL,
+        MODE_POWER_ON,
+        MODE_BAD,
+        MODE_TEMPERATURE,
+        MODE_SAVE
+};
+
+int mode = MODE_DUMP;
+
+enum {
+        ARG_SAVE = 256,
+        ARG_LOAD
+};
+
 int main(int argc, char *argv[]) {
         int ret;
-        const char *device;
+        const char *device = NULL, *argv0, *p, *file = NULL;
         SkDisk *d;
+        int q = 1;
+        SkBool from_blob = FALSE;
 
-        if (argc != 2) {
-                fprintf(stderr, "%s [DEVICE]\n", argv[0]);
-                return 1;
+        static const struct option long_options[] = {
+                {"overall",     no_argument, &mode, MODE_OVERALL},
+                {"power-on",    no_argument, &mode, MODE_POWER_ON},
+                {"bad",         no_argument, &mode, MODE_BAD},
+                {"temperature", no_argument, &mode, MODE_TEMPERATURE},
+                {"save",        optional_argument, NULL, ARG_SAVE},
+                {"load",        optional_argument, NULL, ARG_LOAD},
+                {"help",        no_argument, NULL, 'h' },
+                {0, 0, 0, 0}
+        };
+
+        argv0 = argv[0];
+        if ((p = strrchr(argv0, '/')))
+                argv0 = p+1;
+
+        for (;;) {
+                int opt;
+
+                if ((opt = getopt_long(argc, argv, "h", long_options, NULL)) < 0)
+                        break;
+
+                switch (opt) {
+                        case 0:
+                                break;
+
+                        case 'h':
+                                fprintf(stderr,
+                                        "Usage: %s [PARAMETERS] DEVICE\n"
+                                        "Reads ATA SMART data from a device and parses it.\n"
+                                        "\n"
+                                        "\t--overall        \tShow overall status\n"
+                                        "\t--power-on       \tPrint power on time in ms\n"
+                                        "\t--bad            \tPrint bad sector count\n"
+                                        "\t--temperature    \tPrint drive temperature in mKelvin\n"
+                                        "\t--save[=FILENAME]\tSave raw data to file/STDOUT\n"
+                                        "\t--load           \tRead data from a file/STDIN instead of device\n"
+                                        "\t-h | --help      \tShow this help\n", argv0);
+
+                                return 0;
+
+                        case ARG_SAVE:
+                                file = optarg;
+                                mode = MODE_SAVE;
+                                break;
+
+                        case ARG_LOAD:
+                                device = optarg ? optarg : "-";
+                                from_blob = TRUE;
+                                break;
+
+                        case '?':
+                                return 1;
+
+                        default:
+                                fprintf(stderr, "Invalid arguments.\n");
+                                return 1;
+                }
         }
 
-        device = argv[1];
+        if (!device) {
+                if (optind != argc-1) {
+                        fprintf(stderr, "No or more than one device specified.\n");
+                        return 1;
+                }
 
-        if ((ret = sk_disk_open(device, &d)) < 0) {
-                fprintf(stderr, "Failed to open disk %s: %s\n", device, strerror(errno));
-                return 1;
+                device = argv[optind];
+        } else {
+                if (optind != argc) {
+                        fprintf(stderr, "Too many arguments.\n");
+                        return 1;
+                }
         }
 
-        if ((ret = sk_disk_dump(d)) < 0) {
-                fprintf(stderr, "Failed to dump disk data: %s\n", strerror(errno));
-                return 1;
+        if (from_blob) {
+                uint8_t blob[4096];
+                size_t size;
+                FILE *f = stdin;
+
+                if ((ret = sk_disk_open(NULL, &d)) < 0) {
+                        fprintf(stderr, "Failed to open disk: %s\n", strerror(errno));
+                        return 1;
+                }
+
+                if (strcmp(device, "-")) {
+                        if (!(f = fopen(device, "r"))) {
+                                fprintf(stderr, "Failed to open file: %s\n", strerror(errno));
+                                goto finish;
+                        }
+                }
+
+                size = fread(blob, 1, sizeof(blob), f);
+
+                if (f != stdin)
+                        fclose(f);
+
+                if (size >= sizeof(blob)) {
+                        fprintf(stderr, "File too large for buffer.\n");
+                        goto finish;
+                }
+
+                if ((ret = sk_disk_set_blob(d, blob, size)) < 0) {
+                        fprintf(stderr, "Failed to set blob: %s\n", strerror(errno));
+                        goto finish;
+                }
+
+        } else {
+                if ((ret = sk_disk_open(device, &d)) < 0) {
+                        fprintf(stderr, "Failed to open disk %s: %s\n", device, strerror(errno));
+                        return 1;
+                }
         }
 
-        sk_disk_free(d);
+        switch (mode) {
+                case MODE_DUMP:
+                        if ((ret = sk_disk_dump(d)) < 0) {
+                                fprintf(stderr, "Failed to dump disk data: %s\n", strerror(errno));
+                                goto finish;
+                        }
 
-        return 0;
+                        break;
+
+                case MODE_OVERALL: {
+                        SkSmartOverall overall;
+
+                        if ((ret = sk_disk_smart_read_data(d)) < 0) {
+                                fprintf(stderr, "Failed to read SMART data: %s\n", strerror(errno));
+                                goto finish;
+                        }
+
+                        if ((ret = sk_disk_smart_get_overall(d, &overall)) < 0) {
+                                fprintf(stderr, "Failed to get overall status: %s\n", strerror(errno));
+                                goto finish;
+                        }
+
+                        printf("%s\n", sk_smart_overall_to_string(overall));
+                        q = overall == SK_SMART_OVERALL_GOOD ? 0 : 1;
+                        goto finish;
+                }
+
+                case MODE_POWER_ON: {
+                        uint64_t ms;
+
+                        if ((ret = sk_disk_smart_read_data(d)) < 0) {
+                                fprintf(stderr, "Failed to read SMART data: %s\n", strerror(errno));
+                                goto finish;
+                        }
+
+                        if ((ret = sk_disk_smart_get_power_on(d, &ms)) < 0) {
+                                fprintf(stderr, "Failed to get power on time: %s\n", strerror(errno));
+                                goto finish;
+                        }
+
+                        printf("%llu\n", (unsigned long long) ms);
+                        break;
+                }
+
+
+                case MODE_BAD: {
+                        uint64_t bad;
+
+                        if ((ret = sk_disk_smart_read_data(d)) < 0) {
+                                fprintf(stderr, "Failed to read SMART data: %s\n", strerror(errno));
+                                goto finish;
+                        }
+
+                        if ((ret = sk_disk_smart_get_bad(d, &bad)) < 0) {
+                                fprintf(stderr, "Failed to get bad sectors: %s\n", strerror(errno));
+                                goto finish;
+                        }
+
+                        printf("%llu\n", (unsigned long long) bad);
+                        q = !!bad;
+                        goto finish;
+                }
+
+                case MODE_TEMPERATURE: {
+                        uint64_t mkelvin;
+
+                        if ((ret = sk_disk_smart_read_data(d)) < 0) {
+                                fprintf(stderr, "Failed to read SMART data: %s\n", strerror(errno));
+                                goto finish;
+                        }
+
+                        if ((ret = sk_disk_smart_get_temperature(d, &mkelvin)) < 0) {
+                                fprintf(stderr, "Failed to get temperature: %s\n", strerror(errno));
+                                goto finish;
+                        }
+
+                        printf("%llu\n", (unsigned long long) mkelvin);
+                        break;
+                }
+
+                case MODE_SAVE: {
+                        const void *blob;
+                        size_t size;
+                        FILE *f = stdout;
+                        size_t n;
+
+                        if ((ret = sk_disk_smart_read_data(d)) < 0) {
+                                fprintf(stderr, "Failed to read SMART data: %s\n", strerror(errno));
+                                goto finish;
+                        }
+
+                        if ((ret = sk_disk_get_blob(d, &blob, &size)) < 0) {
+                                fprintf(stderr, "Failed to get blob: %s\n", strerror(errno));
+                                goto finish;
+                        }
+
+                        if (file && strcmp(file, "-")) {
+                                if (!(f = fopen(file, "w"))) {
+                                        fprintf(stderr, "Failed to open '%s': %s\n", file, strerror(errno));
+                                        goto finish;
+                                }
+                        }
+
+                        n = fwrite(blob, 1, size, f);
+
+                        if (f != stdout)
+                                fclose(f);
+
+                        if (n != size) {
+                                fprintf(stderr, "Failed to write to disk: %s\n", strerror(errno));
+                                goto finish;
+                        }
+
+                        break;
+                }
+
+        }
+
+
+        q = 0;
+
+finish:
+
+        if (d)
+                sk_disk_free(d);
+
+        return q;
 }
