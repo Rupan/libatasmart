@@ -182,6 +182,10 @@ int sk_disk_smart_status(SkDisk *d, SkBool *good);
  * sk_disk_check_power_mode() to check wether the disk is sleeping and
  * skip the read if so. */
 int sk_disk_smart_read_data(SkDisk *d);
+
+int sk_disk_get_blob(SkDisk *d, const void **blob, size_t *size);
+int sk_disk_set_blob(SkDisk *d, const void *blob, size_t size);
+
 int sk_disk_smart_parse(SkDisk *d, const SkSmartParsedData **data);
 int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, void* userdata);
 int sk_disk_smart_self_test(SkDisk *d, SkSmartSelfTest test);
@@ -193,11 +197,12 @@ int sk_disk_smart_get_power_on(SkDisk *d, uint64_t *mseconds);
 int sk_disk_smart_get_bad(SkDisk *d, uint64_t *sectors);
 
 /* High level API to get the temperature */
-int sk_disk_smart_get_temperature(SkDisk *d, uint64_t *kelvin);
+int sk_disk_smart_get_temperature(SkDisk *d, uint64_t *mkelvin);
 
 /* Get overall status. This integrates the values of a couple of fields into a single overall status */
 int sk_disk_smart_get_overall(SkDisk *d, SkSmartOverall *overall);
 
+/* Dump the current parsed status to STDOUT */
 int sk_disk_dump(SkDisk *d);
 
 void sk_disk_free(SkDisk *d);
