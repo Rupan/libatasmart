@@ -78,7 +78,7 @@ struct SkDisk {
                 uint8_t identify[512];
                 uint8_t smart_data[512];
                 uint8_t smart_threshold_data[512];
-        } blob;
+        } __attribute__((packed)) blob;
 
         SkBool identify_data_valid:1;
         SkBool smart_data_valid:1;
