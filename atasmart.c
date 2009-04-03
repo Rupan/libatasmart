@@ -1070,7 +1070,7 @@ static const SkSmartQuirkDatabase quirk_database[] = { {
                 "Maxtor 6Y((060|080|120|160)L0|(060|080|120|160|200|250)P0|(060|080|120|160|200|250)M0)|"
                 "Maxtor 7Y250[PM]0|"
                 "Maxtor [45]A(25|30|32)0[JN]0|"
-                "Maxtor 7L(25|30)0[SR]0|"
+                "Maxtor 7L(25|30)0[SR]0"
                 ")$",
                 NULL,
                 SK_SMART_QUIRK_9_POWERONMINUTES
@@ -1083,7 +1083,7 @@ static const SkSmartQuirkDatabase quirk_database[] = { {
                 "HITACHI_DK23..-..B?|"
                 "HITACHI_DK23FA-20J|HTA422020F9AT[JN]0|"
                 "HE[JN]4230[23]0F9AT00|"
-                "HTC4260[23]0G5CE00|HTC4260[56]0G8CE00|"
+                "HTC4260[23]0G5CE00|HTC4260[56]0G8CE00"
                 ")$",
                 NULL,
                 SK_SMART_QUIRK_9_POWERONMINUTES|
