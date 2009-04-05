@@ -89,7 +89,7 @@ int main(int argc, char *argv[]) {
                                         "\t--bad            \tPrint bad sector count\n"
                                         "\t--temperature    \tPrint drive temperature in mKelvin\n"
                                         "\t--save[=FILENAME]\tSave raw data to file/STDOUT\n"
-                                        "\t--load           \tRead data from a file/STDIN instead of device\n"
+                                        "\t--load[=FILENAME]\tRead data from a file/STDIN instead of device\n"
                                         "\t-h | --help      \tShow this help\n", argv0);
 
                                 return 0;
