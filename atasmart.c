@@ -883,7 +883,7 @@ typedef struct SkSmartAttributeInfo {
 /* This data is stolen from smartmontools */
 
 /* %STRINGPOOLSTART% */
-static const SkSmartAttributeInfo const attribute_info[255] = {
+static const SkSmartAttributeInfo const attribute_info[256] = {
         [1]   = { "raw-read-error-rate",         SK_SMART_ATTRIBUTE_UNIT_NONE },
         [2]   = { "throughput-performance",      SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
         [3]   = { "spin-up-time",                SK_SMART_ATTRIBUTE_UNIT_MSECONDS },
