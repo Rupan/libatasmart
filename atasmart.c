@@ -113,8 +113,8 @@ static const char *disk_type_to_string(SkDiskType type) {
                 [SK_DISK_TYPE_ATA_PASSTHROUGH_16] = "16 Byte SCSI ATA SAT Passthru",
                 [SK_DISK_TYPE_ATA_PASSTHROUGH_12] = "12 Byte SCSI ATA SAT Passthru",
                 [SK_DISK_TYPE_ATA] = "Native ATA",
-                [SK_DISK_TYPE_BLOB] = "Blob"
-
+                [SK_DISK_TYPE_BLOB] = "Blob",
+                [SK_DISK_TYPE_UNKNOWN] = "Unknown"
         };
         /* %STRINGPOOLSTOP% */
 
