@@ -452,6 +452,7 @@ static int disk_identify_device(SkDisk *d) {
 int sk_disk_check_sleep_mode(SkDisk *d, SkBool *awake) {
         int ret;
         uint16_t cmd[6];
+        uint8_t status;
 
         if (!d->identify_data_valid) {
                 errno = ENOTSUP;
@@ -473,7 +474,8 @@ int sk_disk_check_sleep_mode(SkDisk *d, SkBool *awake) {
                 return -1;
         }
 
-        *awake = ntohs(cmd[1]) == 0xFF;
+        status = ntohs(cmd[1]) & 0xFF;
+        *awake = status == 0xFF || status == 0x80; /* idle and active/idle is considered awake */
 
         return 0;
 }
