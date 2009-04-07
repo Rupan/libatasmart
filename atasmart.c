@@ -1919,7 +1919,13 @@ int sk_disk_open(const char *name, SkDisk **_d) {
                         goto fail;
                 }
 
-                if ((d->fd = open(name, O_RDONLY|O_NOCTTY)) < 0) {
+                if ((d->fd = open(name,
+                                  O_RDONLY|O_NOCTTY|O_NONBLOCK
+#ifdef O_CLOEXEC
+                                  |O_CLOEXEC
+#endif
+
+                     )) < 0) {
                         ret = d->fd;
                         goto fail;
                 }
