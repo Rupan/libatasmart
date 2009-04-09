@@ -462,10 +462,9 @@ static int disk_sunplus_command(SkDisk *d, SkAtaCommand command, SkDirection dir
         cdb[1] = 0x00;
         cdb[2] = 0x21;
 
-        if ((ret = sg_io(d->fd, SG_DXFER_FROM_DEV, cdb, sizeof(cdb), buf, sizeof(buf), sense, sizeof(sense))) < 0) {
-                fprintf(stderr, "sgio: %s\n", strerror(errno));
+        /* Ask for response */
+        if ((ret = sg_io(d->fd, SG_DXFER_FROM_DEV, cdb, sizeof(cdb), buf, sizeof(buf), sense, sizeof(sense))) < 0)
                 return ret;
-        }
 
         memset(bytes, 0, 12);
 
