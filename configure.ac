@@ -113,6 +113,9 @@ AC_TYPE_UID_T
 
 AC_SYS_LARGEFILE
 
+PKG_CHECK_MODULES([LIBUDEV], [libudev])
+AC_DEFINE([LIBUDEV_I_KNOW_THE_API_IS_SUBJECT_TO_CHANGE], 1, [I know the API is subject to change.])
+
 ###################################
 #            Output               #
 ###################################

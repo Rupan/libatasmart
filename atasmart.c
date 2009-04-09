@@ -42,6 +42,7 @@
 #include <linux/fs.h>
 #include <sys/types.h>
 #include <regex.h>
+#include <libudev.h>
 
 #include "atasmart.h"
 
@@ -59,12 +60,17 @@ typedef enum SkDirection {
 } SkDirection;
 
 typedef enum SkDiskType {
-        SK_DISK_TYPE_ATA_PASSTHROUGH_12, /* ATA passthrough over SCSI, 12-byte version */
-        SK_DISK_TYPE_ATA_PASSTHROUGH_16, /* ATA passthrough over SCSI transport */
-        SK_DISK_TYPE_ATA,
-        SK_DISK_TYPE_UNKNOWN,
+        /* These three will be autotested for: */
+        SK_DISK_TYPE_ATA_PASSTHROUGH_12, /* ATA passthrough over SCSI transport, 12-byte version */
+        SK_DISK_TYPE_ATA_PASSTHROUGH_16, /* ATA passthrough over SCSI transport, 16-byte version */
+        SK_DISK_TYPE_ATA,                /* Classic Linux /dev/hda ioctls */
+
+        /* These three will not be autotested for */
+        SK_DISK_TYPE_SUNPLUS,            /* SunPlus USB/ATA bridges */
         SK_DISK_TYPE_BLOB,
-        _SK_DISK_TYPE_MAX
+        SK_DISK_TYPE_UNKNOWN,
+        _SK_DISK_TYPE_MAX,
+        _SK_DISK_TYPE_TEST_MAX = SK_DISK_TYPE_SUNPLUS /* only auto test until here */
 } SkDiskType;
 
 struct SkDisk {
@@ -112,7 +118,8 @@ static const char *disk_type_to_string(SkDiskType type) {
         static const char* const map[_SK_DISK_TYPE_MAX] = {
                 [SK_DISK_TYPE_ATA_PASSTHROUGH_16] = "16 Byte SCSI ATA SAT Passthru",
                 [SK_DISK_TYPE_ATA_PASSTHROUGH_12] = "12 Byte SCSI ATA SAT Passthru",
-                [SK_DISK_TYPE_ATA] = "Native ATA",
+                [SK_DISK_TYPE_ATA] = "Native Linux ATA",
+                [SK_DISK_TYPE_SUNPLUS] = "Sunplus SCSI ATA Passthru",
                 [SK_DISK_TYPE_BLOB] = "Blob",
                 [SK_DISK_TYPE_UNKNOWN] = "Unknown"
         };
@@ -394,14 +401,81 @@ static int disk_passthrough_12_command(SkDisk *d, SkAtaCommand command, SkDirect
 
         memset(bytes, 0, 12);
 
-        bytes[1] = desc[3];
-        bytes[2] = desc[4];
-        bytes[3] = desc[5];
-        bytes[9] = desc[7];
-        bytes[8] = desc[9];
-        bytes[7] = desc[11];
-        bytes[10] = desc[12];
-        bytes[11] = desc[13];
+        bytes[1] = desc[3]; /* FEATURES */
+        bytes[2] = desc[4]; /* STATUS */
+        bytes[3] = desc[5]; /* SECTORS */
+        bytes[9] = desc[7]; /* LBA LOW */
+        bytes[8] = desc[9]; /* LBA MID */
+        bytes[7] = desc[11]; /* LBA HIGH */
+        bytes[10] = desc[12]; /* SELECT */
+        bytes[11] = desc[13]; /* ERROR */
+
+        return ret;
+}
+
+static int disk_sunplus_command(SkDisk *d, SkAtaCommand command, SkDirection direction, void* cmd_data, void* data, size_t *len) {
+        uint8_t *bytes = cmd_data;
+        uint8_t cdb[12];
+        uint8_t sense[32], buf[8];
+        int ret;
+        static const int direction_map[] = {
+                [SK_DIRECTION_NONE] = SG_DXFER_NONE,
+                [SK_DIRECTION_IN] = SG_DXFER_FROM_DEV,
+                [SK_DIRECTION_OUT] = SG_DXFER_TO_DEV
+        };
+
+        assert(d->type == SK_DISK_TYPE_SUNPLUS);
+
+        /* SunplusIT specific SCSI ATA pass-thru */
+
+        memset(cdb, 0, sizeof(cdb));
+
+        cdb[0] = 0xF8; /* OPERATION CODE: Sunplus specific */
+        cdb[1] = 0x00; /* Subcommand: Pass-thru */
+        cdb[2] = 0x22;
+
+        if (direction == SK_DIRECTION_NONE)
+                cdb[3] = 0x00; /* protocol */
+        else if (direction == SK_DIRECTION_IN)
+                cdb[3] = 0x10; /* protocol */
+        else if (direction == SK_DIRECTION_OUT)
+                cdb[3] = 0x11; /* protocol */
+
+        cdb[4] = bytes[3]; /* size? */
+        cdb[5] = bytes[1]; /* FEATURES */
+        cdb[6] = bytes[3]; /* SECTORS */
+        cdb[7] = bytes[9]; /* LBA LOW */
+        cdb[8] = bytes[8]; /* LBA MID */
+        cdb[9] = bytes[7]; /* LBA HIGH */
+        cdb[10] = bytes[10] | 0xA0; /* SELECT */
+        cdb[11] = (uint8_t) command;
+
+        memset(sense, 0, sizeof(sense));
+
+        /* Issue request */
+        if ((ret = sg_io(d->fd, direction_map[direction], cdb, sizeof(cdb), data, (size_t) cdb[6] * 512, sense, sizeof(sense))) < 0)
+                return ret;
+
+        memset(cdb, 0, sizeof(cdb));
+
+        cdb[0] = 0xF8;
+        cdb[1] = 0x00;
+        cdb[2] = 0x21;
+
+        if ((ret = sg_io(d->fd, SG_DXFER_FROM_DEV, cdb, sizeof(cdb), buf, sizeof(buf), sense, sizeof(sense))) < 0) {
+                fprintf(stderr, "sgio: %s\n", strerror(errno));
+                return ret;
+        }
+
+        memset(bytes, 0, 12);
+
+        bytes[2] = buf[1]; /* ERROR */
+        bytes[3] = buf[2]; /* SECTORS */
+        bytes[9] = buf[3]; /* LBA LOW */
+        bytes[8] = buf[4]; /* LBA MID */
+        bytes[7] = buf[5]; /* LBA HIGH */
+        bytes[10] = buf[6]; /* SELECT */
+        bytes[11] = buf[7]; /* STATUS */
 
         return ret;
 }
@@ -411,7 +485,8 @@ static int disk_command(SkDisk *d, SkAtaCommand command, SkDirection direction, 
         static int (* const disk_command_table[_SK_DISK_TYPE_MAX]) (SkDisk *d, SkAtaCommand command, SkDirection direction, void* cmd_data, void* data, size_t *len) = {
                 [SK_DISK_TYPE_ATA] = disk_ata_command,
                 [SK_DISK_TYPE_ATA_PASSTHROUGH_12] = disk_passthrough_12_command,
-                [SK_DISK_TYPE_ATA_PASSTHROUGH_16] = disk_passthrough_16_command
+                [SK_DISK_TYPE_ATA_PASSTHROUGH_16] = disk_passthrough_16_command,
+                [SK_DISK_TYPE_SUNPLUS] = disk_sunplus_command
         };
 
         assert(d);
@@ -1896,6 +1971,75 @@ int sk_disk_get_size(SkDisk *d, uint64_t *bytes) {
         return 0;
 }
 
+static int disk_find_type(SkDisk *d, dev_t devnum) {
+        struct udev *udev;
+        struct udev_device *dev = NULL;
+        int r = -1;
+        const char *bus;
+
+        assert(d);
+
+        if (!(udev = udev_new())) {
+                errno = ENXIO;
+                goto finish;
+        }
+
+        if (!(dev = udev_device_new_from_devnum(udev, 'b', devnum))) {
+                errno = ENODEV;
+                goto finish;
+        }
+
+        if (!(bus = udev_device_get_property_value(dev, "ID_BUS")))
+                d->type = SK_DISK_TYPE_UNKNOWN;
+        else {
+                if (strcmp(bus, "ata") == 0)
+                        d->type = SK_DISK_TYPE_ATA;
+                else if (strcmp(bus, "scsi") == 0)
+                        d->type = SK_DISK_TYPE_ATA_PASSTHROUGH_16;
+                else if (strcmp(bus, "usb") == 0) {
+                        struct udev_device *usb;
+                        const char *product, *vendor;
+                        uint32_t pid, vid;
+
+                        if (!(usb = udev_device_get_parent_with_subsystem_devtype(dev, "usb", "usb_device"))) {
+                                errno = ENODEV;
+                                goto finish;
+                        }
+
+                        if (!(product = udev_device_get_sysattr_value(usb, "idProduct")) ||
+                            sscanf(product, "%04x", &pid) != 1) {
+                                errno = ENODEV;
+                                goto finish;
+                        }
+
+                        if (!(vendor = udev_device_get_sysattr_value(usb, "idVendor")) ||
+                            sscanf(vendor, "%04x", &vid) != 1) {
+                                errno = ENODEV;
+                                goto finish;
+                        }
+
+                        if ((vid == 0x0c0b && pid == 0xb159) ||
+                            (vid == 0x04fc && pid == 0x0c25))
+                                d->type = SK_DISK_TYPE_SUNPLUS;
+                        else
+                                d->type = SK_DISK_TYPE_ATA_PASSTHROUGH_12;
+
+                } else
+                        d->type = SK_DISK_TYPE_UNKNOWN;
+        }
+
+        r = 0;
+
+finish:
+        if (dev)
+                udev_device_unref(dev);
+
+        if (udev)
+                udev_unref(udev);
+
+        return r;
+}
+
 int sk_disk_open(const char *name, SkDisk **_d) {
         SkDisk *d;
         int ret = -1;
@@ -1949,11 +2093,17 @@ int sk_disk_open(const char *name, SkDisk **_d) {
                         goto fail;
                 }
 
-                /* OK, it's a real block device with a size. Find a way to
-                 * identify the device. */
-                for (d->type = 0; d->type != SK_DISK_TYPE_UNKNOWN; d->type++)
-                        if (disk_identify_device(d) >= 0)
-                                break;
+                /* OK, it's a real block device with a size. Now let's find the suitable API */
+                if ((ret = disk_find_type(d, st.st_rdev)) < 0)
+                        goto fail;
+
+                if (d->type == SK_DISK_TYPE_UNKNOWN) {
+                        /* We have no clue, so let's autotest for a working API */
+                        for (d->type = 0; d->type < _SK_DISK_TYPE_TEST_MAX; d->type++)
+                                if (disk_identify_device(d) >= 0)
+                                        break;
+                } else
+                        disk_identify_device(d);
 
                 /* Check if driver can do SMART, and enable if necessary */
                 if (disk_smart_is_available(d)) {
