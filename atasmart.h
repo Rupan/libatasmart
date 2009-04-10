@@ -49,6 +49,10 @@ typedef enum SkSmartSelfTest {
         SK_SMART_SELF_TEST_EXTENDED = 2,
         SK_SMART_SELF_TEST_CONVEYANCE = 3,
         SK_SMART_SELF_TEST_ABORT = 127
+
+        /* This enum may be extended at any time without this being
+         * considered an ABI change. So take care when you use this
+         * type! */
 } SkSmartSelfTest;
 
 const char* sk_smart_self_test_to_string(SkSmartSelfTest test);
@@ -71,6 +75,10 @@ typedef enum SkSmartOfflineDataCollectionStatus {
         SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_FATAL,
         SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_UNKNOWN,
         _SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_MAX
+
+        /* This enum may be extended at any time without this being
+         * considered an ABI change. So take care when you use this
+         * type! */
 } SkSmartOfflineDataCollectionStatus;
 
 const char* sk_smart_offline_data_collection_status_to_string(SkSmartOfflineDataCollectionStatus status);
@@ -87,6 +95,10 @@ typedef enum SkSmartSelfTestExecutionStatus {
         SK_SMART_SELF_TEST_EXECUTION_STATUS_ERROR_HANDLING = 8,
         SK_SMART_SELF_TEST_EXECUTION_STATUS_INPROGRESS = 15,
         _SK_SMART_SELF_TEST_EXECUTION_STATUS_MAX
+
+        /* This enum may be extended at any time without this being
+         * considered an ABI change. So take care when you use this
+         * type! */
 } SkSmartSelfTestExecutionStatus;
 
 const char *sk_smart_self_test_execution_status_to_string(SkSmartSelfTestExecutionStatus status);
@@ -122,6 +134,10 @@ typedef enum SkSmartAttributeUnit {
         SK_SMART_ATTRIBUTE_UNIT_SECTORS,
         SK_SMART_ATTRIBUTE_UNIT_MKELVIN,     /* millikelvin */
         _SK_SMART_ATTRIBUTE_UNIT_MAX
+
+        /* This enum may be extended at any time without this being
+         * considered an ABI change. So take care when you use this
+         * type! */
 } SkSmartAttributeUnit;
 
 const char* sk_smart_attribute_unit_to_string(SkSmartAttributeUnit unit);
@@ -159,6 +175,10 @@ typedef enum SkSmartOverall  {
         SK_SMART_OVERALL_BAD_SECTOR,     /* At least one bad sector */
         SK_SMART_OVERALL_BAD_ATTRIBUTE,  /* At least one attribute exceeded its threshold */
         _SK_SMART_OVERALL_MAX
+
+        /* This enum may be extended at any time without this being
+         * considered an ABI change. So take care when you use this
+         * type! */
 } SkSmartOverall;
 
 const char* sk_smart_overall_to_string(SkSmartOverall overall);
