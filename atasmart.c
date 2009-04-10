@@ -42,6 +42,7 @@
 #include <linux/fs.h>
 #include <sys/types.h>
 #include <regex.h>
+#include <sys/param.h>
 #include <libudev.h>
 
 #include "atasmart.h"
@@ -73,6 +74,27 @@ typedef enum SkDiskType {
         _SK_DISK_TYPE_TEST_MAX = SK_DISK_TYPE_SUNPLUS /* only auto test until here */
 } SkDiskType;
 
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+#define MAKE_TAG(a,b,c,d)                        \
+        (((uint32_t) d << 24) |                  \
+         ((uint32_t) c << 16) |                  \
+         ((uint32_t) b << 8) |                   \
+         ((uint32_t) a))
+#else
+#define MAKE_TAG(a,b,c,d)                        \
+        (((uint32_t) a << 24) |                  \
+         ((uint32_t) b << 16) |                  \
+         ((uint32_t) c << 8) |                   \
+         ((uint32_t) d))
+#endif
+
+typedef enum SkBlobTag {
+        SK_BLOB_TAG_IDENTIFY = MAKE_TAG('I', 'D', 'F', 'Y'),
+        SK_BLOB_TAG_SMART_STATUS = MAKE_TAG('S', 'M', 'S', 'T'),
+        SK_BLOB_TAG_SMART_DATA = MAKE_TAG('S', 'M', 'D', 'T'),
+        SK_BLOB_TAG_SMART_THRESHOLDS = MAKE_TAG('S', 'M', 'T', 'H')
+} SkBlobTag;
+
 struct SkDisk {
         char *name;
         int fd;
@@ -80,18 +102,21 @@ struct SkDisk {
 
         uint64_t size;
 
-        struct {
-                uint8_t identify[512];
-                uint8_t smart_data[512];
-                uint8_t smart_threshold_data[512];
-        } __attribute__((packed)) blob;
+        uint8_t identify[512];
+        uint8_t smart_data[512];
+        uint8_t smart_thresholds[512];
 
-        SkBool identify_data_valid:1;
+        SkBool identify_valid:1;
         SkBool smart_data_valid:1;
-        SkBool smart_threshold_data_valid:1;
+        SkBool smart_thresholds_valid:1;
+
+        SkBool blob_smart_status:1;
+        SkBool blob_smart_status_valid:1;
 
         SkIdentifyParsedData identify_parsed_data;
         SkSmartParsedData smart_parsed_data;
+
+        void *blob;
 };
 
 /* ATA commands */
@@ -132,34 +157,34 @@ static const char *disk_type_to_string(SkDiskType type) {
 }
 
 static SkBool disk_smart_is_available(SkDisk *d) {
-        return d->identify_data_valid && !!(d->blob.identify[164] & 1);
+        return d->identify_valid && !!(d->identify[164] & 1);
 }
 
 static SkBool disk_smart_is_enabled(SkDisk *d) {
-        return d->identify_data_valid && !!(d->blob.identify[170] & 1);
+        return d->identify_valid && !!(d->identify[170] & 1);
 }
 
 static SkBool disk_smart_is_conveyance_test_available(SkDisk *d) {
         assert(d->smart_data_valid);
 
-        return !!(d->blob.smart_data[367] & 32);
+        return !!(d->smart_data[367] & 32);
 }
 static SkBool disk_smart_is_short_and_extended_test_available(SkDisk *d) {
         assert(d->smart_data_valid);
 
-        return !!(d->blob.smart_data[367] & 16);
+        return !!(d->smart_data[367] & 16);
 }
 
 static SkBool disk_smart_is_start_test_available(SkDisk *d) {
         assert(d->smart_data_valid);
 
-        return !!(d->blob.smart_data[367] & 1);
+        return !!(d->smart_data[367] & 1);
 }
 
 static SkBool disk_smart_is_abort_test_available(SkDisk *d) {
         assert(d->smart_data_valid);
 
-        return !!(d->blob.smart_data[367] & 41);
+        return !!(d->smart_data[367] & 41);
 }
 
 static int disk_ata_command(SkDisk *d, SkAtaCommand command, SkDirection direction, void* cmd_data, void* data, size_t *len) {
@@ -510,7 +535,7 @@ static int disk_identify_device(SkDisk *d) {
 
         cmd[1] = htons(1);
 
-        if ((ret = disk_command(d, SK_ATA_COMMAND_IDENTIFY_DEVICE, SK_DIRECTION_IN, cmd, d->blob.identify, &len)) < 0)
+        if ((ret = disk_command(d, SK_ATA_COMMAND_IDENTIFY_DEVICE, SK_DIRECTION_IN, cmd, d->identify, &len)) < 0)
                 return ret;
 
         if (len != 512) {
@@ -518,7 +543,7 @@ static int disk_identify_device(SkDisk *d) {
                 return -1;
         }
 
-        d->identify_data_valid = TRUE;
+        d->identify_valid = TRUE;
 
         return 0;
 }
@@ -528,7 +553,7 @@ int sk_disk_check_sleep_mode(SkDisk *d, SkBool *awake) {
         uint16_t cmd[6];
         uint8_t status;
 
-        if (!d->identify_data_valid) {
+        if (!d->identify_valid) {
                 errno = ENOTSUP;
                 return -1;
         }
@@ -598,7 +623,7 @@ int sk_disk_smart_read_data(SkDisk *d) {
         cmd[3] = htons(0x00C2U);
         cmd[4] = htons(0x4F00U);
 
-        if ((ret = disk_command(d, SK_ATA_COMMAND_SMART, SK_DIRECTION_IN, cmd, d->blob.smart_data, &len)) < 0)
+        if ((ret = disk_command(d, SK_ATA_COMMAND_SMART, SK_DIRECTION_IN, cmd, d->smart_data, &len)) < 0)
                 return ret;
 
         d->smart_data_valid = TRUE;
@@ -627,10 +652,10 @@ static int disk_smart_read_thresholds(SkDisk *d) {
         cmd[3] = htons(0x00C2U);
         cmd[4] = htons(0x4F00U);
 
-        if ((ret = disk_command(d, SK_ATA_COMMAND_SMART, SK_DIRECTION_IN, cmd, d->blob.smart_threshold_data, &len)) < 0)
+        if ((ret = disk_command(d, SK_ATA_COMMAND_SMART, SK_DIRECTION_IN, cmd, d->smart_thresholds, &len)) < 0)
                 return ret;
 
-        d->smart_threshold_data_valid = TRUE;
+        d->smart_thresholds_valid = TRUE;
 
         return ret;
 }
@@ -645,7 +670,13 @@ int sk_disk_smart_status(SkDisk *d, SkBool *good) {
         }
 
         if (d->type == SK_DISK_TYPE_BLOB) {
-                errno = ENOTSUP;
+
+                if (d->blob_smart_status_valid) {
+                        *good = d->blob_smart_status;
+                        return 0;
+                }
+
+                errno = ENXIO;
                 return -1;
         }
 
@@ -783,14 +814,14 @@ int sk_disk_identify_parse(SkDisk *d, const SkIdentifyParsedData **ipd) {
         assert(d);
         assert(ipd);
 
-        if (!d->identify_data_valid) {
+        if (!d->identify_valid) {
                 errno = ENOENT;
                 return -1;
         }
 
-        read_string(d->identify_parsed_data.serial, d->blob.identify+20, 20);
-        read_string(d->identify_parsed_data.firmware, d->blob.identify+46, 8);
-        read_string(d->identify_parsed_data.model, d->blob.identify+54, 40);
+        read_string(d->identify_parsed_data.serial, d->identify+20, 20);
+        read_string(d->identify_parsed_data.firmware, d->identify+46, 8);
+        read_string(d->identify_parsed_data.model, d->identify+54, 40);
 
         *ipd = &d->identify_parsed_data;
 
@@ -801,7 +832,7 @@ int sk_disk_smart_is_available(SkDisk *d, SkBool *b) {
         assert(d);
         assert(b);
 
-        if (!d->identify_data_valid) {
+        if (!d->identify_valid) {
                 errno = ENOTSUP;
                 return -1;
         }
@@ -814,7 +845,7 @@ int sk_disk_identify_is_available(SkDisk *d, SkBool *b) {
         assert(d);
         assert(b);
 
-        *b = d->identify_data_valid;
+        *b = d->identify_valid;
         return 0;
 }
 
@@ -1339,7 +1370,7 @@ int sk_disk_smart_parse(SkDisk *d, const SkSmartParsedData **spd) {
                 return -1;
         }
 
-        switch (d->blob.smart_data[362]) {
+        switch (d->smart_data[362]) {
                 case 0x00:
                 case 0x80:
                         d->smart_parsed_data.offline_data_collection_status = SK_SMART_OFFLINE_DATA_COLLECTION_STATUS_NEVER;
@@ -1374,19 +1405,19 @@ int sk_disk_smart_parse(SkDisk *d, const SkSmartParsedData **spd) {
                         break;
         }
 
-        d->smart_parsed_data.self_test_execution_percent_remaining = 10*(d->blob.smart_data[363] & 0xF);
-        d->smart_parsed_data.self_test_execution_status = (d->blob.smart_data[363] >> 4) & 0xF;
+        d->smart_parsed_data.self_test_execution_percent_remaining = 10*(d->smart_data[363] & 0xF);
+        d->smart_parsed_data.self_test_execution_status = (d->smart_data[363] >> 4) & 0xF;
 
-        d->smart_parsed_data.total_offline_data_collection_seconds = (uint16_t) d->blob.smart_data[364] | ((uint16_t) d->blob.smart_data[365] << 8);
+        d->smart_parsed_data.total_offline_data_collection_seconds = (uint16_t) d->smart_data[364] | ((uint16_t) d->smart_data[365] << 8);
 
         d->smart_parsed_data.conveyance_test_available = disk_smart_is_conveyance_test_available(d);
         d->smart_parsed_data.short_and_extended_test_available = disk_smart_is_short_and_extended_test_available(d);
         d->smart_parsed_data.start_test_available = disk_smart_is_start_test_available(d);
         d->smart_parsed_data.abort_test_available = disk_smart_is_abort_test_available(d);
 
-        d->smart_parsed_data.short_test_polling_minutes = d->blob.smart_data[372];
-        d->smart_parsed_data.extended_test_polling_minutes = d->blob.smart_data[373] != 0xFF ? d->blob.smart_data[373] : ((uint16_t) d->blob.smart_data[376] << 8 | (uint16_t) d->blob.smart_data[375]);
-        d->smart_parsed_data.conveyance_test_polling_minutes = d->blob.smart_data[374];
+        d->smart_parsed_data.short_test_polling_minutes = d->smart_data[372];
+        d->smart_parsed_data.extended_test_polling_minutes = d->smart_data[373] != 0xFF ? d->smart_data[373] : ((uint16_t) d->smart_data[376] << 8 | (uint16_t) d->smart_data[375]);
+        d->smart_parsed_data.conveyance_test_polling_minutes = d->smart_data[374];
 
         *spd = &d->smart_parsed_data;
 
@@ -1397,12 +1428,12 @@ static void find_threshold(SkDisk *d, SkSmartAttributeParsedData *a) {
         uint8_t *p;
         unsigned n;
 
-        if (!d->smart_threshold_data_valid) {
+        if (!d->smart_thresholds_valid) {
                 a->threshold_valid = FALSE;
                 return;
         }
 
-        for (n = 0, p = d->blob.smart_threshold_data+2; n < 30; n++, p+=12)
+        for (n = 0, p = d->smart_thresholds+2; n < 30; n++, p+=12)
                 if (p[0] == a->id)
                         break;
 
@@ -1443,7 +1474,7 @@ int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, 
                 return -1;
         }
 
-        for (n = 0, p = d->blob.smart_data + 2; n < 30; n++, p+=12) {
+        for (n = 0, p = d->smart_data + 2; n < 30; n++, p+=12) {
                 SkSmartAttributeParsedData a;
                 const SkSmartAttributeInfo *i;
                 char *an = NULL;
@@ -1692,11 +1723,6 @@ int sk_disk_smart_get_overall(SkDisk *d, SkSmartOverall *overall) {
         assert(d);
         assert(overall);
 
-        if (d->type == SK_DISK_TYPE_BLOB) {
-                errno = ENOTSUP;
-                return -1;
-        }
-
         if (sk_disk_smart_status(d, &good) < 0)
                 return -1;
 
@@ -1840,7 +1866,7 @@ int sk_disk_dump(SkDisk *d) {
         else
                 printf("Size: %s\n", strerror(errno));
 
-        if (d->identify_data_valid) {
+        if (d->identify_valid) {
                 const SkIdentifyParsedData *ipd;
                 SkSmartQuirk quirk = 0;
                 unsigned i;
@@ -2146,33 +2172,92 @@ void sk_disk_free(SkDisk *d) {
                 close(d->fd);
 
         free(d->name);
+        free(d->blob);
         free(d);
 }
 
-int sk_disk_get_blob(SkDisk *d, const void **blob, size_t *size) {
+int sk_disk_get_blob(SkDisk *d, const void **blob, size_t *rsize) {
+        size_t size;
+        SkBool good, have_good = FALSE;
+        uint32_t *p;
+
         assert(d);
         assert(blob);
-        assert(size);
+        assert(rsize);
 
-        if (!d->identify_data_valid) {
+        size =
+                (d->identify_valid ? 8 + sizeof(d->identify) : 0) +
+                (d->smart_data_valid ? 8 + sizeof(d->smart_data) : 0) +
+                (d->smart_thresholds ? 8 + sizeof(d->smart_thresholds) : 0);
+
+        if (sk_disk_smart_status(d, &good) >= 0) {
+                size += 12;
+                have_good = TRUE;
+        }
+
+        if (size <= 0) {
                 errno = ENODATA;
                 return -1;
         }
 
-        *blob = &d->blob;
-        *size = sizeof(d->blob.identify);
+        free(d->blob);
+        if (!(d->blob = malloc(size))) {
+                errno = ENOMEM;
+                return -1;
+        }
+
+        p = d->blob;
+
+        /* These memory accesses are only OK as long as all our
+         * objects are sensibly aligned, which they are... */
+
+        if (d->identify_valid) {
+                p[0] = SK_BLOB_TAG_IDENTIFY;
+                p[1] = htonl(sizeof(d->identify));
+                p += 2;
+
+                memcpy(p, d->identify, sizeof(d->identify));
+                p = (uint32_t*) ((uint8_t*) p + sizeof(d->identify));
+        }
+
+        if (have_good) {
+                p[0] = SK_BLOB_TAG_SMART_STATUS;
+                p[1] = htonl(4);
+                p[2] = htonl(!!good);
+                p += 3;
+        }
 
         if (d->smart_data_valid) {
-                *size += sizeof(d->blob.smart_data);
+                p[0] = SK_BLOB_TAG_SMART_DATA;
+                p[1] = htonl(sizeof(d->smart_data));
+                p += 2;
 
-                if (d->smart_threshold_data_valid)
-                        *size += sizeof(d->blob.smart_threshold_data);
+                memcpy(p, d->smart_data, sizeof(d->smart_data));
+                p = (uint32_t*) ((uint8_t*) p + sizeof(d->smart_data));
         }
+
+        if (d->smart_thresholds_valid) {
+                p[0] = SK_BLOB_TAG_SMART_THRESHOLDS;
+                p[1] = htonl(sizeof(d->smart_thresholds));
+                p += 2;
+
+                memcpy(p, d->smart_thresholds, sizeof(d->smart_thresholds));
+                p = (uint32_t*) ((uint8_t*) p + sizeof(d->smart_thresholds));
+        }
+
+        assert((size_t) ((uint8_t*) p - (uint8_t*) d->blob) == size);
+
+        *blob = d->blob;
+        *rsize = size;
 
         return 0;
 }
 
 int sk_disk_set_blob(SkDisk *d, const void *blob, size_t size) {
+        const uint32_t *p;
+        size_t left;
+        SkBool idv = FALSE, sdv = FALSE, stv = FALSE, bssv = FALSE;
+
         assert(d);
         assert(blob);
 
@@ -2181,25 +2266,124 @@ int sk_disk_set_blob(SkDisk *d, const void *blob, size_t size) {
                 return -1;
         }
 
-        if (size == sizeof(d->blob.identify)+sizeof(d->blob.smart_data)+sizeof(d->blob.smart_threshold_data)) {
-                d->identify_data_valid = TRUE;
-                d->smart_data_valid = TRUE;
-                d->smart_threshold_data_valid = TRUE;
-        } else if (size == sizeof(d->blob.identify)+sizeof(d->blob.smart_data)) {
-                d->identify_data_valid = TRUE;
-                d->smart_data_valid = TRUE;
-                d->smart_threshold_data_valid = FALSE;
-        } else if (size == sizeof(d->blob.identify)) {
-                d->identify_data_valid = TRUE;
-                d->smart_data_valid = FALSE;
-                d->smart_threshold_data_valid = FALSE;
-        } else {
+        if (size <= 0) {
                 errno = EINVAL;
                 return -1;
         }
 
-        memset(&d->blob, 0, sizeof(d->blob));
-        memcpy(&d->blob, blob, size);
+        /* First run, verify if everything makes sense */
+        p = blob;
+        left = size;
+        while (left > 0) {
+                uint32_t tag, tsize;
+
+                if (left < 8) {
+                        errno = EINVAL;
+                        return -1;
+                }
+
+                memcpy(&tag, p, 4);
+                memcpy(&tsize, p+1, 4);
+                p += 2;
+                left -= 8;
+
+                if (left < ntohl(tsize)) {
+                        errno = EINVAL;
+                        return -1;
+                }
+
+                switch (tag) {
+
+                        case SK_BLOB_TAG_IDENTIFY:
+                                if (ntohl(tsize) != sizeof(d->identify) || idv) {
+                                        errno = EINVAL;
+                                        return -1;
+                                }
+                                idv = TRUE;
+                                break;
+
+                        case SK_BLOB_TAG_SMART_STATUS:
+                                if (ntohl(tsize) != 4 || bssv) {
+                                        errno = EINVAL;
+                                        return -1;
+                                }
+                                bssv = TRUE;
+                                break;
+
+                        case SK_BLOB_TAG_SMART_DATA:
+                                if (ntohl(tsize) != sizeof(d->smart_data) || sdv) {
+                                        errno = EINVAL;
+                                        return -1;
+                                }
+                                sdv = TRUE;
+                                break;
+
+                        case SK_BLOB_TAG_SMART_THRESHOLDS:
+                                if (ntohl(tsize) != sizeof(d->smart_thresholds) || stv) {
+                                        errno = EINVAL;
+                                        return -1;
+                                }
+                                stv = TRUE;
+                                break;
+                }
+
+                p = (uint32_t*) ((uint8_t*) p + ntohl(tsize));
+                left -= ntohl(tsize);
+        }
+
+        if (!idv) {
+                errno = -ENODATA;
+                return -1;
+        }
+
+        d->identify_valid = idv;
+        d->smart_data_valid = sdv;
+        d->smart_thresholds_valid = stv;
+        d->blob_smart_status_valid = bssv;
+
+        /* Second run, actually copy things in */
+        p = blob;
+        left = size;
+        while (left > 0) {
+                uint32_t tag, tsize;
+
+                assert(left >= 8);
+                memcpy(&tag, p, 4);
+                memcpy(&tsize, p+1, 4);
+                p += 2;
+                left -= 8;
+
+                assert(left >= ntohl(tsize));
+
+                switch (tag) {
+
+                        case SK_BLOB_TAG_IDENTIFY:
+                                assert(ntohl(tsize) == sizeof(d->identify));
+                                memcpy(d->identify, p, sizeof(d->identify));
+                                break;
+
+                        case SK_BLOB_TAG_SMART_STATUS: {
+                                uint32_t ok;
+                                assert(ntohl(tsize) == 4);
+                                memcpy(&ok, p, 4);
+                                d->blob_smart_status = !!ok;
+                                break;
+                        }
+
+                        case SK_BLOB_TAG_SMART_DATA:
+                                assert(ntohl(tsize) == sizeof(d->smart_data));
+                                memcpy(d->smart_data, p, sizeof(d->smart_data));
+                                break;
+
+                        case SK_BLOB_TAG_SMART_THRESHOLDS:
+                                assert(ntohl(tsize) == sizeof(d->smart_thresholds));
+                                memcpy(d->smart_thresholds, p, sizeof(d->smart_thresholds));
+                                break;
+                }
+
+                p = (uint32_t*) ((uint8_t*) p + ntohl(tsize));
+                left -= ntohl(tsize);
+        }
 
         return 0;
 }
