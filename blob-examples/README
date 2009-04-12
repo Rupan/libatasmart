@@ -1,3 +1,7 @@
 This directory contains SMART data of bad drives for testing purposes.
 Generated with "skdump --save". File name should follow the format
-"MODEL--FIRMWARE".
+"MODEL--FIRMWARE". Also, replace spaces by underscores ('_') so that
+these files can be handled properly by automake.
+
+If you add another snapshot here, make sure to edit ../Makefile.am so
+that it is included in the tarball.

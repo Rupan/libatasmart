@@ -16,7 +16,19 @@
 # License along with libatasmart. If not, If not, see
 # <http://www.gnu.org/licenses/>.
 
-EXTRA_DIST = bootstrap.sh LGPL README atasmart.vapi atasmart.c
+EXTRA_DIST = \
+	bootstrap.sh \
+	LGPL \
+	README \
+	atasmart.vapi \
+	atasmart.c \
+	blob-examples/README \
+	blob-examples/Maxtor_96147H8--BAC51KJ0 \
+	blob-examples/SAMSUNG_HD501LJ--CR100-12 \
+	blob-examples/ST320410A--3.39 \
+	blob-examples/WDC_WD2500JB--00REA0-20.00K20 \
+	blob-examples/WDC_WD5000AAKS--00TMA0-12.01C01
+
 SUBDIRS =
 
 CLEANFILES = atasmart.strpool.c
