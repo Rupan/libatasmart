@@ -527,10 +527,12 @@ static int disk_identify_device(SkDisk *d) {
         uint16_t cmd[6];
         int ret;
         size_t len = 512;
+        const uint8_t *p;
 
         if (d->type == SK_DISK_TYPE_BLOB)
                 return 0;
 
+        memset(d->identify, 0, len);
         memset(cmd, 0, sizeof(cmd));
 
         cmd[1] = htons(1);
@@ -539,6 +541,18 @@ static int disk_identify_device(SkDisk *d) {
                 return ret;
 
         if (len != 512) {
+                errno = EIO;
+                return -1;
+        }
+
+        /* Check if IDENTIFY data is all NULs */
+        for (p = d->identify; p < (const uint8_t*) d->identify+len; p++)
+                if (*p) {
+                        p = NULL;
+                        break;
+                }
+
+        if (p) {
                 errno = EIO;
                 return -1;
         }
