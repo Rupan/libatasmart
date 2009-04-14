@@ -1539,7 +1539,6 @@ int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, 
                 }
 
                 cb(d, &a, userdata);
-
                 free(an);
         }
 
@@ -2060,9 +2059,8 @@ int sk_disk_get_size(SkDisk *d, uint64_t *bytes) {
 
 static int disk_find_type(SkDisk *d, dev_t devnum) {
         struct udev *udev;
-        struct udev_device *dev = NULL;
+        struct udev_device *dev = NULL, *usb;
         int r = -1;
-        const char *bus;
 
         assert(d);
 
@@ -2076,44 +2074,34 @@ static int disk_find_type(SkDisk *d, dev_t devnum) {
                 goto finish;
         }
 
-        if (!(bus = udev_device_get_property_value(dev, "ID_BUS")))
+        if ((usb = udev_device_get_parent_with_subsystem_devtype(dev, "usb", "usb_device"))) {
+                const char *product, *vendor;
+                uint32_t pid, vid;
+
+                if (!(product = udev_device_get_sysattr_value(usb, "idProduct")) ||
+                    sscanf(product, "%04x", &pid) != 1) {
+                        errno = ENODEV;
+                        goto finish;
+                }
+
+                if (!(vendor = udev_device_get_sysattr_value(usb, "idVendor")) ||
+                    sscanf(vendor, "%04x", &vid) != 1) {
+                        errno = ENODEV;
+                        goto finish;
+                }
+
+                if ((vid == 0x0c0b && pid == 0xb159) ||
+                    (vid == 0x04fc && pid == 0x0c25))
+                        d->type = SK_DISK_TYPE_SUNPLUS;
+                else
+                        d->type = SK_DISK_TYPE_ATA_PASSTHROUGH_12;
+
+        } else if (udev_device_get_parent_with_subsystem_devtype(dev, "ide", NULL))
+                d->type = SK_DISK_TYPE_ATA;
+        else if (udev_device_get_parent_with_subsystem_devtype(dev, "scsi", NULL))
+                d->type = SK_DISK_TYPE_ATA_PASSTHROUGH_16;
+        else
                 d->type = SK_DISK_TYPE_UNKNOWN;
-        else {
-                if (strcmp(bus, "ata") == 0)
-                        d->type = SK_DISK_TYPE_ATA;
-                else if (strcmp(bus, "scsi") == 0)
-                        d->type = SK_DISK_TYPE_ATA_PASSTHROUGH_16;
-                else if (strcmp(bus, "usb") == 0) {
-                        struct udev_device *usb;
-                        const char *product, *vendor;
-                        uint32_t pid, vid;
-
-                        if (!(usb = udev_device_get_parent_with_subsystem_devtype(dev, "usb", "usb_device"))) {
-                                errno = ENODEV;
-                                goto finish;
-                        }
-
-                        if (!(product = udev_device_get_sysattr_value(usb, "idProduct")) ||
-                            sscanf(product, "%04x", &pid) != 1) {
-                                errno = ENODEV;
-                                goto finish;
-                        }
-
-                        if (!(vendor = udev_device_get_sysattr_value(usb, "idVendor")) ||
-                            sscanf(vendor, "%04x", &vid) != 1) {
-                                errno = ENODEV;
-                                goto finish;
-                        }
-
-                        if ((vid == 0x0c0b && pid == 0xb159) ||
-                            (vid == 0x04fc && pid == 0x0c25))
-                                d->type = SK_DISK_TYPE_SUNPLUS;
-                        else
-                                d->type = SK_DISK_TYPE_ATA_PASSTHROUGH_12;
-
-                } else
-                        d->type = SK_DISK_TYPE_UNKNOWN;
-        }
 
         r = 0;
 
