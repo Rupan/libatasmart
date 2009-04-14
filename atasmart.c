@@ -2046,7 +2046,8 @@ int sk_disk_dump(SkDisk *d) {
 
                 if ((ret = sk_disk_smart_parse_attributes(d, disk_dump_attributes, NULL)) < 0)
                         return ret;
-        }
+        } else
+		printf("ATA SMART not supported.\n");
 
         return 0;
 }
