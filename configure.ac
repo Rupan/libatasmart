@@ -21,7 +21,7 @@
 
 AC_PREREQ(2.57)
 
-AC_INIT([libatasmart], 0.9, [mzyvongnfzneg (at) 0pointer (dot) net])
+AC_INIT([libatasmart], 0.10, [mzyvongnfzneg (at) 0pointer (dot) net])
 AC_CONFIG_SRCDIR([atasmart.c])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR(m4)
@@ -30,7 +30,7 @@ AM_INIT_AUTOMAKE([foreign 1.9 -Wall])
 
 AC_SUBST(PACKAGE_URL, [https://http://git.0pointer.de/?p=libatasmart.git])
 
-AC_SUBST(LIBATASMART_VERSION_INFO, [2:5:2])
+AC_SUBST(LIBATASMART_VERSION_INFO, [3:0:3])
 
 AC_CANONICAL_HOST
 
