@@ -35,8 +35,11 @@ enum {
         MODE_DUMP = 10,
         MODE_OVERALL,
         MODE_POWER_ON,
+        MODE_POWER_CYCLE,
         MODE_BAD,
         MODE_TEMPERATURE,
+        MODE_STATUS,
+        MODE_CAN_SMART,
         MODE_SAVE
 };
 
@@ -57,8 +60,11 @@ int main(int argc, char *argv[]) {
         static const struct option long_options[] = {
                 {"overall",     no_argument, &mode, MODE_OVERALL},
                 {"power-on",    no_argument, &mode, MODE_POWER_ON},
+                {"power-cycle", no_argument, &mode, MODE_POWER_CYCLE},
                 {"bad",         no_argument, &mode, MODE_BAD},
                 {"temperature", no_argument, &mode, MODE_TEMPERATURE},
+                {"can-smart",   no_argument, &mode, MODE_CAN_SMART},
+                {"status",      no_argument, &mode, MODE_STATUS},
                 {"save",        optional_argument, NULL, ARG_SAVE},
                 {"load",        optional_argument, NULL, ARG_LOAD},
                 {"help",        no_argument, NULL, 'h' },
@@ -85,7 +91,10 @@ int main(int argc, char *argv[]) {
                                         "Reads ATA SMART data from a device and parses it.\n"
                                         "\n"
                                         "\t--overall        \tShow overall status\n"
+                                        "\t--status         \tShow SMART status\n"
+                                        "\t--can-smart      \tShow whether SMART is supported\n"
                                         "\t--power-on       \tPrint power on time in ms\n"
+                                        "\t--power-cycle    \tPrint number of power cycles\n"
                                         "\t--bad            \tPrint bad sector count\n"
                                         "\t--temperature    \tPrint drive temperature in mKelvin\n"
                                         "\t--save[=FILENAME]\tSave raw data to file/STDOUT\n"
@@ -175,6 +184,19 @@ int main(int argc, char *argv[]) {
 
                         break;
 
+                case MODE_CAN_SMART: {
+                        SkBool available;
+
+                        if ((ret = sk_disk_smart_is_available(d, &available)) < 0) {
+                                fprintf(stderr, "Failed to query whether SMART is available: %s\n", strerror(errno));
+                                goto finish;
+                        }
+
+                        printf("%s\n", available ? "YES" : "NO");
+                        q = available ? 0 : 1;
+                        break;
+                }
+
                 case MODE_OVERALL: {
                         SkSmartOverall overall;
 
@@ -190,6 +212,19 @@ int main(int argc, char *argv[]) {
 
                         printf("%s\n", sk_smart_overall_to_string(overall));
                         q = overall == SK_SMART_OVERALL_GOOD ? 0 : 1;
+                        goto finish;
+                }
+
+                case MODE_STATUS: {
+                        SkBool good;
+
+                        if ((ret = sk_disk_smart_status(d, &good)) < 0) {
+                                fprintf(stderr, "Failed to get SMART status: %s\n", strerror(errno));
+                                goto finish;
+                        }
+
+                        printf("%s\n", good ? "GOOD" : "BAD");
+                        q = good ? 0 : 1;
                         goto finish;
                 }
 
@@ -210,6 +245,22 @@ int main(int argc, char *argv[]) {
                         break;
                 }
 
+                case MODE_POWER_CYCLE: {
+                        uint64_t count;
+
+                        if ((ret = sk_disk_smart_read_data(d)) < 0) {
+                                fprintf(stderr, "Failed to read SMART data: %s\n", strerror(errno));
+                                goto finish;
+                        }
+
+                        if ((ret = sk_disk_smart_get_power_cycle(d, &count)) < 0) {
+                                fprintf(stderr, "Failed to get power cycles: %s\n", strerror(errno));
+                                goto finish;
+                        }
+
+                        printf("%llu\n", (unsigned long long) count);
+                        break;
+                }
 
                 case MODE_BAD: {
                         uint64_t bad;
