@@ -512,7 +512,9 @@ static int disk_command(SkDisk *d, SkAtaCommand command, SkDirection direction, 
                 [SK_DISK_TYPE_ATA] = disk_ata_command,
                 [SK_DISK_TYPE_ATA_PASSTHROUGH_12] = disk_passthrough_12_command,
                 [SK_DISK_TYPE_ATA_PASSTHROUGH_16] = disk_passthrough_16_command,
-                [SK_DISK_TYPE_SUNPLUS] = disk_sunplus_command
+                [SK_DISK_TYPE_SUNPLUS] = disk_sunplus_command,
+		[SK_DISK_TYPE_BLOB] = NULL,
+		[SK_DISK_TYPE_UNKNOWN] = NULL
         };
 
         assert(d);
@@ -521,6 +523,11 @@ static int disk_command(SkDisk *d, SkAtaCommand command, SkDirection direction, 
 
         assert(direction == SK_DIRECTION_NONE || (data && len && *len > 0));
         assert(direction != SK_DIRECTION_NONE || (!data && !len));
+
+	if (!disk_command_table[d->type]) {
+		errno = -ENOTSUP;
+		return -1;
+	}
 
         return disk_command_table[d->type](d, command, direction, cmd_data, data, len);
 }
@@ -2177,6 +2184,8 @@ int sk_disk_open(const char *name, SkDisk **_d) {
                         for (d->type = 0; d->type < _SK_DISK_TYPE_TEST_MAX; d->type++)
                                 if (disk_identify_device(d) >= 0)
                                         break;
+			if (d->type >= _SK_DISK_TYPE_TEST_MAX)
+				d->type = SK_DISK_TYPE_UNKNOWN;
                 } else
                         disk_identify_device(d);
 
