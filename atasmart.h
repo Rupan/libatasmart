@@ -213,6 +213,9 @@ int sk_disk_smart_self_test(SkDisk *d, SkSmartSelfTest test);
 /* High level API to get the power on time */
 int sk_disk_smart_get_power_on(SkDisk *d, uint64_t *mseconds);
 
+/* High level API to get the power cycle count */
+int sk_disk_smart_get_power_cycle(SkDisk *d, uint64_t *count);
+
 /* High level API to get the number of bad sectors (i.e. pending and reallocated) */
 int sk_disk_smart_get_bad(SkDisk *d, uint64_t *sectors);
 

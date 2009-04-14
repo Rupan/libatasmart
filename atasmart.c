@@ -1645,6 +1645,40 @@ int sk_disk_smart_get_power_on(SkDisk *d, uint64_t *mseconds) {
         return 0;
 }
 
+static void power_cycle_cb(SkDisk *d, const SkSmartAttributeParsedData *a, struct attr_helper *ah) {
+
+        if (a->pretty_unit != SK_SMART_ATTRIBUTE_UNIT_NONE)
+                return;
+
+        if (!strcmp(a->name, "power-cycle-count")) {
+
+                if (!ah->found || a->pretty_value > *ah->value)
+                        *ah->value = a->pretty_value;
+
+                ah->found = TRUE;
+        }
+}
+
+int sk_disk_smart_get_power_cycle(SkDisk *d, uint64_t *count) {
+        struct attr_helper ah;
+
+        assert(d);
+        assert(count);
+
+        ah.found = FALSE;
+        ah.value = count;
+
+        if (sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) power_cycle_cb, &ah) < 0)
+                return -1;
+
+        if (!ah.found) {
+                errno = ENOENT;
+                return -1;
+        }
+
+        return 0;
+}
+
 static void reallocated_cb(SkDisk *d, const SkSmartAttributeParsedData *a, struct attr_helper *ah) {
 
         if (a->pretty_unit != SK_SMART_ATTRIBUTE_UNIT_SECTORS)
@@ -1919,7 +1953,7 @@ int sk_disk_dump(SkDisk *d) {
                 const SkSmartParsedData *spd;
                 SkBool good;
                 char pretty[32];
-                uint64_t value;
+                uint64_t value, power_on;
 
                 ret = sk_disk_smart_status(d, &good);
                 printf("SMART Disk Health Good: %s\n",
@@ -1962,10 +1996,20 @@ int sk_disk_dump(SkDisk *d) {
                                print_value(pretty, sizeof(pretty), value, SK_SMART_ATTRIBUTE_UNIT_SECTORS),
                                value > 0 ? ENDHIGHLIGHT : "");
 
-                if (sk_disk_smart_get_power_on(d, &value) < 0)
+                if (sk_disk_smart_get_power_on(d, &power_on) < 0) {
                         printf("Powered On: %s\n", strerror(errno));
-                else
-                        printf("Powered On: %s\n", print_value(pretty, sizeof(pretty), value, SK_SMART_ATTRIBUTE_UNIT_MSECONDS));
+                        power_on = 0;
+                } else
+                        printf("Powered On: %s\n", print_value(pretty, sizeof(pretty), power_on, SK_SMART_ATTRIBUTE_UNIT_MSECONDS));
+
+                if (sk_disk_smart_get_power_cycle(d, &value) < 0)
+                        printf("Power Cycles: %s\n", strerror(errno));
+                else {
+                        printf("Power Cycles: %llu\n", (unsigned long long) value);
+
+                        if (value > 0 && power_on > 0)
+                                printf("Average Powered On Per Power Cycle: %s\n", print_value(pretty, sizeof(pretty), power_on/value, SK_SMART_ATTRIBUTE_UNIT_MSECONDS));
+                }
 
                 if (sk_disk_smart_get_temperature(d, &value) < 0)
                         printf("Temperature: %s\n", strerror(errno));
