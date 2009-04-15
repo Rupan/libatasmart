@@ -1768,7 +1768,7 @@ const char* sk_smart_overall_to_string(SkSmartOverall overall) {
 }
 
 static void bad_attribute_cb(SkDisk *d, const SkSmartAttributeParsedData *a, SkBool *good) {
-        if (a->good_valid && !a->good)
+        if (a->prefailure && a->good_valid && !a->good)
                 *good = FALSE;
 }
 
