@@ -1692,8 +1692,7 @@ static void reallocated_cb(SkDisk *d, const SkSmartAttributeParsedData *a, struc
         if (a->pretty_unit != SK_SMART_ATTRIBUTE_UNIT_SECTORS)
                 return;
 
-        if (!strcmp(a->name, "reallocated-sector-count") ||
-            !strcmp(a->name, "reallocated-event-count")) {
+        if (!strcmp(a->name, "reallocated-sector-count")) {
 
                 if (!ah->found || a->pretty_value > *ah->value)
                         *ah->value = a->pretty_value;
