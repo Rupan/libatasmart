@@ -173,7 +173,7 @@ typedef enum SkSmartOverall  {
         SK_SMART_OVERALL_GOOD,
         SK_SMART_OVERALL_BAD_STATUS,     /* Smart Self Assessment negative */
         SK_SMART_OVERALL_BAD_SECTOR,     /* At least one bad sector */
-        SK_SMART_OVERALL_BAD_ATTRIBUTE,  /* At least one attribute exceeded its threshold */
+        SK_SMART_OVERALL_BAD_ATTRIBUTE,  /* At least one pre-fail attribute exceeded its threshold in the past or now */
         _SK_SMART_OVERALL_MAX
 
         /* This enum may be extended at any time without this being
