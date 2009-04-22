@@ -1205,6 +1205,7 @@ typedef enum SkSmartQuirk {
         SK_SMART_QUIRK_194_UNKNOWN = 64,
         SK_SMART_QUIRK_200_WRITEERRORCOUNT = 128,
         SK_SMART_QUIRK_201_DETECTEDTACOUNT = 256,
+        SK_SMART_QUIRK_9_UNKNOWN = 512
 } SkSmartQuirk;
 
 /* %STRINGPOOLSTART% */
@@ -1218,6 +1219,7 @@ static const char *quirk_name[] = {
         "194_UNKNOWN",
         "200_WRITEERRORCOUNT",
         "201_DETECTEDTACOUNT",
+        "9_UNKNOWN",
         NULL
 };
 /* %STRINGPOOLSTOP% */
@@ -1229,6 +1231,12 @@ typedef struct SkSmartQuirkDatabase {
 } SkSmartQuirkDatabase;
 
 static const SkSmartQuirkDatabase quirk_database[] = { {
+
+        /*** Seagate */
+                "^ST9160821AS$",
+                NULL,
+                SK_SMART_QUIRK_9_UNKNOWN
+        }, {
 
         /*** Fujitsu */
                 "^FUJITSU MHR2040AT$",
@@ -1451,7 +1459,8 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
                                                 "power-on-half-minutes", SK_SMART_ATTRIBUTE_UNIT_MSECONDS
                                         };
                                         return &a;
-                                }
+                                } else if (quirk & SK_SMART_QUIRK_9_UNKNOWN)
+                                        return NULL;
                                 /* %STRINGPOOLSTOP% */
 
                                 break;
