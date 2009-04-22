@@ -1165,14 +1165,14 @@ static const SkSmartAttributeInfo const attribute_info[256] = {
         [193] = { "load-cycle-count",            SK_SMART_ATTRIBUTE_UNIT_NONE },
         [194] = { "temperature-celsius-2",       SK_SMART_ATTRIBUTE_UNIT_MKELVIN },
         [195] = { "hardware-ecc-recovered",      SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [196] = { "reallocated-event-count",     SK_SMART_ATTRIBUTE_UNIT_SECTORS },
+        [196] = { "reallocated-event-count",     SK_SMART_ATTRIBUTE_UNIT_NONE },
         [197] = { "current-pending-sector",      SK_SMART_ATTRIBUTE_UNIT_SECTORS },
         [198] = { "offline-uncorrectable",       SK_SMART_ATTRIBUTE_UNIT_SECTORS },
         [199] = { "udma-crc-error-count",        SK_SMART_ATTRIBUTE_UNIT_NONE },
         [200] = { "multi-zone-error-rate",       SK_SMART_ATTRIBUTE_UNIT_NONE },
         [201] = { "soft-read-error-rate",        SK_SMART_ATTRIBUTE_UNIT_NONE },
         [202] = { "ta-increase-count",           SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [203] = { "run-out-cancel",              SK_SMART_ATTRIBUTE_UNIT_NONE },
+        [203] = { "run-out-cancel",              SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
         [204] = { "shock-count-write-open",      SK_SMART_ATTRIBUTE_UNIT_NONE },
         [205] = { "shock-rate-write-open",       SK_SMART_ATTRIBUTE_UNIT_NONE },
         [206] = { "flying-height",               SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
@@ -1665,7 +1665,6 @@ int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, 
 
                 /* Handle a few fields specially */
                 if ((!strcmp(a.name, "reallocated-sector-count") ||
-                     !strcmp(a.name, "reallocated-event-count") ||
                      !strcmp(a.name, "current-pending-sector")) &&
                     a.pretty_unit == SK_SMART_ATTRIBUTE_UNIT_SECTORS &&
                     a.pretty_value > 0) {
