@@ -68,6 +68,7 @@ typedef enum SkDiskType {
 
         /* These three will not be autotested for */
         SK_DISK_TYPE_SUNPLUS,            /* SunPlus USB/ATA bridges */
+        SK_DISK_TYPE_JMICRON,            /* JMicron USB/ATA bridges */
         SK_DISK_TYPE_BLOB,
         SK_DISK_TYPE_UNKNOWN,
         _SK_DISK_TYPE_MAX,
@@ -145,6 +146,7 @@ static const char *disk_type_to_string(SkDiskType type) {
                 [SK_DISK_TYPE_ATA_PASSTHROUGH_12] = "12 Byte SCSI ATA SAT Passthru",
                 [SK_DISK_TYPE_ATA] = "Native Linux ATA",
                 [SK_DISK_TYPE_SUNPLUS] = "Sunplus SCSI ATA Passthru",
+                [SK_DISK_TYPE_JMICRON] = "JMicron SCSI ATA Passthru",
                 [SK_DISK_TYPE_BLOB] = "Blob",
                 [SK_DISK_TYPE_UNKNOWN] = "Unknown"
         };
@@ -346,7 +348,7 @@ static int disk_passthrough_16_command(SkDisk *d, SkAtaCommand command, SkDirect
 
         memset(sense, 0, sizeof(sense));
 
-        if ((ret = sg_io(d->fd, direction_map[direction], cdb, sizeof(cdb), data, (size_t) cdb[6] * 512, sense, sizeof(sense))) < 0)
+        if ((ret = sg_io(d->fd, direction_map[direction], cdb, sizeof(cdb), data, len ? *len : 0, sense, sizeof(sense))) < 0)
                 return ret;
 
         if (sense[0] != 0x72 || desc[0] != 0x9 || desc[1] != 0x0c) {
@@ -416,7 +418,7 @@ static int disk_passthrough_12_command(SkDisk *d, SkAtaCommand command, SkDirect
 
         memset(sense, 0, sizeof(sense));
 
-        if ((ret = sg_io(d->fd, direction_map[direction], cdb, sizeof(cdb), data, (size_t) cdb[4] * 512, sense, sizeof(sense))) < 0)
+        if ((ret = sg_io(d->fd, direction_map[direction], cdb, sizeof(cdb), data, len ? *len : 0, sense, sizeof(sense))) < 0)
                 return ret;
 
         if (sense[0] != 0x72 || desc[0] != 0x9 || desc[1] != 0x0c) {
@@ -451,7 +453,7 @@ static int disk_sunplus_command(SkDisk *d, SkAtaCommand command, SkDirection dir
 
         assert(d->type == SK_DISK_TYPE_SUNPLUS);
 
-        /* SunplusIT specific SCSI ATA pass-thru */
+        /* SunplusIT specific SCSI ATA pass-thru. Inspired by smartmonutils' support for these bridges */
 
         memset(cdb, 0, sizeof(cdb));
 
@@ -478,7 +480,7 @@ static int disk_sunplus_command(SkDisk *d, SkAtaCommand command, SkDirection dir
         memset(sense, 0, sizeof(sense));
 
         /* Issue request */
-        if ((ret = sg_io(d->fd, direction_map[direction], cdb, sizeof(cdb), data, (size_t) cdb[6] * 512, sense, sizeof(sense))) < 0)
+        if ((ret = sg_io(d->fd, direction_map[direction], cdb, sizeof(cdb), data, len ? *len : 0, sense, sizeof(sense))) < 0)
                 return ret;
 
         memset(cdb, 0, sizeof(cdb));
@@ -506,6 +508,129 @@ static int disk_sunplus_command(SkDisk *d, SkAtaCommand command, SkDirection dir
         return ret;
 }
 
+static int disk_jmicron_command(SkDisk *d, SkAtaCommand command, SkDirection direction, void* cmd_data, void* _data, size_t *_len) {
+        uint8_t *bytes = cmd_data;
+        uint8_t cdb[12];
+        uint8_t sense[32];
+        uint8_t port;
+        int ret;
+        SkBool is_smart_status = FALSE;
+        void *data = _data;
+        size_t len = _len ? *_len : 0;
+        uint8_t smart_status = 0;
+
+        static const int direction_map[] = {
+                [SK_DIRECTION_NONE] = SG_DXFER_NONE,
+                [SK_DIRECTION_IN] = SG_DXFER_FROM_DEV,
+                [SK_DIRECTION_OUT] = SG_DXFER_TO_DEV
+        };
+
+        assert(d->type == SK_DISK_TYPE_JMICRON);
+
+        /* JMicron specific SCSI ATA pass-thru. Inspired by smartmonutils' support for these bridges */
+
+        memset(cdb, 0, sizeof(cdb));
+
+        cdb[0] = 0xdf; /* operation code */
+        cdb[1] = 0x10;
+        cdb[2] = 0x00;
+        cdb[3] = 0x00; /* size HI */
+        cdb[4] = sizeof(port); /* size LO */
+        cdb[5] = 0x00;
+        cdb[6] = 0x72; /* register address HI */
+        cdb[7] = 0x0f; /* register address LO */
+        cdb[8] = 0x00;
+        cdb[9] = 0x00;
+        cdb[10] = 0x00;
+        cdb[11] = 0xfd;
+
+        memset(sense, 0, sizeof(sense));
+
+        if ((ret = sg_io(d->fd, SG_DXFER_FROM_DEV, cdb, sizeof(cdb), &port, sizeof(port), sense, sizeof(sense))) < 0)
+                return ret;
+
+        /* Port & 0x04 is port #0, Port & 0x40 is port #1 */
+        if (!(port & 0x44))
+                return -EIO;
+
+        cdb[0] = 0xdf; /* OPERATION CODE: 12 byte pass through */
+
+        if (command == SK_ATA_COMMAND_SMART && bytes[1] == SK_SMART_COMMAND_RETURN_STATUS) {
+                /* We need to rewrite the SMART status request */
+                is_smart_status = TRUE;
+                direction = SK_DIRECTION_IN;
+                data = &smart_status;
+                len = sizeof(smart_status);
+                cdb[1] = 0x10;
+        } else if (direction == SK_DIRECTION_NONE)
+                cdb[1] = 0x10;
+        else if (direction == SK_DIRECTION_IN)
+                cdb[1] = 0x10;
+        else if (direction == SK_DIRECTION_OUT)
+                cdb[1] = 0x00;
+
+        cdb[2] = 0x00;
+
+        cdb[3] = (uint8_t) (len >> 8);
+        cdb[4] = (uint8_t) (len & 0xFF);
+
+        cdb[5] = bytes[1]; /* FEATURES */
+        cdb[6] = bytes[3]; /* SECTORS */
+
+        cdb[7] = bytes[9]; /* LBA LOW */
+        cdb[8] = bytes[8]; /* LBA MID */
+        cdb[9] = bytes[7]; /* LBA HIGH */
+
+        cdb[10] = bytes[10] | ((port & 0x04) ? 0xA0 : 0xB0); /* SELECT */
+        cdb[11] = (uint8_t) command;
+
+        memset(sense, 0, sizeof(sense));
+
+        if ((ret = sg_io(d->fd, direction_map[direction], cdb, sizeof(cdb), data, len, sense, sizeof(sense))) < 0)
+                return ret;
+
+        memset(bytes, 0, 12);
+
+        if (is_smart_status) {
+                if (smart_status == 0x01 || smart_status == 0xc2) {
+                        bytes[7] = 0xc2; /* LBA HIGH */
+                        bytes[8] = 0x4f; /* LBA MID */
+                } else if (smart_status == 0x00 || smart_status == 0x2c) {
+                        bytes[7] = 0x2c; /* LBA HIGH */
+                        bytes[8] = 0xf4; /* LBA MID */
+                } else
+                        return -EIO;
+        } else {
+                uint8_t regbuf[16];
+
+                cdb[0] = 0xdf; /* operation code */
+                cdb[1] = 0x10;
+                cdb[2] = 0x00;
+                cdb[3] = 0x00; /* size HI */
+                cdb[4] = sizeof(regbuf); /* size LO */
+                cdb[5] = 0x00;
+                cdb[6] = (port & 0x04) ? 0x80 : 0x90; /* register address HI */
+                cdb[7] = 0x00; /* register address LO */
+                cdb[8] = 0x00;
+                cdb[9] = 0x00;
+                cdb[10] = 0x00;
+                cdb[11] = 0xfd;
+
+                if ((ret = sg_io(d->fd, SG_DXFER_FROM_DEV, cdb, sizeof(cdb), regbuf, sizeof(regbuf), sense, sizeof(sense))) < 0)
+                        return ret;
+
+                bytes[2] = regbuf[14]; /* STATUS */
+                bytes[3] = regbuf[0]; /* SECTORS */
+                bytes[9] = regbuf[6]; /* LBA LOW */
+                bytes[8] = regbuf[4]; /* LBA MID */
+                bytes[7] = regbuf[10]; /* LBA HIGH */
+                bytes[10] = regbuf[9]; /* SELECT */
+                bytes[11] = regbuf[13]; /* ERROR */
+        }
+
+        return ret;
+}
+
 static int disk_command(SkDisk *d, SkAtaCommand command, SkDirection direction, void* cmd_data, void* data, size_t *len) {
 
         static int (* const disk_command_table[_SK_DISK_TYPE_MAX]) (SkDisk *d, SkAtaCommand command, SkDirection direction, void* cmd_data, void* data, size_t *len) = {
@@ -513,8 +638,9 @@ static int disk_command(SkDisk *d, SkAtaCommand command, SkDirection direction, 
                 [SK_DISK_TYPE_ATA_PASSTHROUGH_12] = disk_passthrough_12_command,
                 [SK_DISK_TYPE_ATA_PASSTHROUGH_16] = disk_passthrough_16_command,
                 [SK_DISK_TYPE_SUNPLUS] = disk_sunplus_command,
-		[SK_DISK_TYPE_BLOB] = NULL,
-		[SK_DISK_TYPE_UNKNOWN] = NULL
+                [SK_DISK_TYPE_JMICRON] = disk_jmicron_command,
+                [SK_DISK_TYPE_BLOB] = NULL,
+                [SK_DISK_TYPE_UNKNOWN] = NULL
         };
 
         assert(d);
@@ -524,10 +650,10 @@ static int disk_command(SkDisk *d, SkAtaCommand command, SkDirection direction, 
         assert(direction == SK_DIRECTION_NONE || (data && len && *len > 0));
         assert(direction != SK_DIRECTION_NONE || (!data && !len));
 
-	if (!disk_command_table[d->type]) {
-		errno = -ENOTSUP;
-		return -1;
-	}
+        if (!disk_command_table[d->type]) {
+                errno = -ENOTSUP;
+                return -1;
+        }
 
         return disk_command_table[d->type](d, command, direction, cmd_data, data, len);
 }
@@ -2046,7 +2172,7 @@ int sk_disk_dump(SkDisk *d) {
                 if ((ret = sk_disk_smart_parse_attributes(d, disk_dump_attributes, NULL)) < 0)
                         return ret;
         } else
-		printf("ATA SMART not supported.\n");
+                printf("ATA SMART not supported.\n");
 
         return 0;
 }
@@ -2100,6 +2226,11 @@ static int disk_find_type(SkDisk *d, dev_t devnum) {
                 if ((vid == 0x0c0b && pid == 0xb159) ||
                     (vid == 0x04fc && pid == 0x0c25))
                         d->type = SK_DISK_TYPE_SUNPLUS;
+                if ((vid == 0x152d && pid == 0x2329) ||
+                    (vid == 0x152d && pid == 0x2336) ||
+                    (vid == 0x152d && pid == 0x2338) ||
+                    (vid == 0x152d && pid == 0x2339))
+                        d->type = SK_DISK_TYPE_JMICRON;
                 else
                         d->type = SK_DISK_TYPE_ATA_PASSTHROUGH_12;
 
@@ -2184,8 +2315,8 @@ int sk_disk_open(const char *name, SkDisk **_d) {
                         for (d->type = 0; d->type < _SK_DISK_TYPE_TEST_MAX; d->type++)
                                 if (disk_identify_device(d) >= 0)
                                         break;
-			if (d->type >= _SK_DISK_TYPE_TEST_MAX)
-				d->type = SK_DISK_TYPE_UNKNOWN;
+                        if (d->type >= _SK_DISK_TYPE_TEST_MAX)
+                                d->type = SK_DISK_TYPE_UNKNOWN;
                 } else
                         disk_identify_device(d);
 
