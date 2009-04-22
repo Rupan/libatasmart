@@ -23,10 +23,14 @@ EXTRA_DIST = \
 	atasmart.vapi \
 	atasmart.c \
 	blob-examples/README \
+	blob-examples/FUJITSU_MHY2120BH--0084000D \
+	blob-examples/FUJITSU_MHZ2160BH_G1--0084000A \
 	blob-examples/Maxtor_96147H8--BAC51KJ0 \
 	blob-examples/SAMSUNG_HD501LJ--CR100-12 \
 	blob-examples/ST320410A--3.39 \
+	blob-examples/ST9160821AS--3.CLH \
 	blob-examples/WDC_WD2500JB--00REA0-20.00K20 \
+	blob-examples/WDC_WD2500JS-75NCB3--10.02E04 \
 	blob-examples/WDC_WD5000AAKS--00TMA0-12.01C01
 
 SUBDIRS =
