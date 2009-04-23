@@ -1128,7 +1128,7 @@ static void make_pretty(SkSmartAttributeParsedData *a) {
         else if (!strcmp(a->name, "power-on-hours") ||
                  !strcmp(a->name, "loaded-hours") ||
                  !strcmp(a->name, "head-flying-hours"))
-                a->pretty_value = fourtyeight * 60 * 60 * 1000;
+                a->pretty_value = (fourtyeight & 0xFFFFFFFFU) * 60 * 60 * 1000;
         else if (!strcmp(a->name, "reallocated-sector-count"))
                 a->pretty_value = fourtyeight & 0xFFFFFFFFU;
         else
@@ -1204,8 +1204,7 @@ typedef enum SkSmartQuirk {
         SK_SMART_QUIRK_194_10XCELSIUS = 32,
         SK_SMART_QUIRK_194_UNKNOWN = 64,
         SK_SMART_QUIRK_200_WRITEERRORCOUNT = 128,
-        SK_SMART_QUIRK_201_DETECTEDTACOUNT = 256,
-        SK_SMART_QUIRK_9_UNKNOWN = 512
+        SK_SMART_QUIRK_201_DETECTEDTACOUNT = 256
 } SkSmartQuirk;
 
 /* %STRINGPOOLSTART% */
@@ -1219,7 +1218,6 @@ static const char *quirk_name[] = {
         "194_UNKNOWN",
         "200_WRITEERRORCOUNT",
         "201_DETECTEDTACOUNT",
-        "9_UNKNOWN",
         NULL
 };
 /* %STRINGPOOLSTOP% */
@@ -1231,12 +1229,6 @@ typedef struct SkSmartQuirkDatabase {
 } SkSmartQuirkDatabase;
 
 static const SkSmartQuirkDatabase quirk_database[] = { {
-
-        /*** Seagate */
-                "^ST9160821AS$",
-                NULL,
-                SK_SMART_QUIRK_9_UNKNOWN
-        }, {
 
         /*** Fujitsu */
                 "^FUJITSU MHR2040AT$",
@@ -1459,8 +1451,7 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
                                                 "power-on-half-minutes", SK_SMART_ATTRIBUTE_UNIT_MSECONDS
                                         };
                                         return &a;
-                                } else if (quirk & SK_SMART_QUIRK_9_UNKNOWN)
-                                        return NULL;
+                                }
                                 /* %STRINGPOOLSTOP% */
 
                                 break;
