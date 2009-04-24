@@ -2225,7 +2225,8 @@ static int disk_find_type(SkDisk *d, dev_t devnum) {
                 }
 
                 if ((vid == 0x0c0b && pid == 0xb159) ||
-                    (vid == 0x04fc && pid == 0x0c25))
+                    (vid == 0x04fc && pid == 0x0c25) ||
+                    (vid == 0x04fc && pid == 0x0c15))
                         d->type = SK_DISK_TYPE_SUNPLUS;
                 else if ((vid == 0x152d && pid == 0x2329) ||
                     (vid == 0x152d && pid == 0x2336) ||
