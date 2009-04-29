@@ -83,3 +83,5 @@ BUILT_SOURCES = \
 
 atasmart.strpool.c: atasmart.c strpool
 	$(top_builddir)/strpool $< $@
+
+ACLOCAL_AMFLAGS = -I m4
