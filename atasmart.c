@@ -69,8 +69,9 @@ typedef enum SkDiskType {
         /* These three will not be autotested for */
         SK_DISK_TYPE_SUNPLUS,            /* SunPlus USB/ATA bridges */
         SK_DISK_TYPE_JMICRON,            /* JMicron USB/ATA bridges */
-        SK_DISK_TYPE_BLOB,
-        SK_DISK_TYPE_UNKNOWN,
+        SK_DISK_TYPE_BLOB,               /* From a file */
+        SK_DISK_TYPE_NONE,               /* No access method */
+        SK_DISK_TYPE_AUTO,               /* We don't know yet */
         _SK_DISK_TYPE_MAX,
         _SK_DISK_TYPE_TEST_MAX = SK_DISK_TYPE_SUNPLUS /* only auto test until here */
 } SkDiskType;
@@ -138,7 +139,7 @@ typedef enum SkSmartCommand {
         SK_SMART_COMMAND_RETURN_STATUS = 0xDA
 } SkSmartCommand;
 
-static const char *disk_type_to_string(SkDiskType type) {
+static const char *disk_type_to_human_string(SkDiskType type) {
 
         /* %STRINGPOOLSTART% */
         static const char* const map[_SK_DISK_TYPE_MAX] = {
@@ -148,7 +149,8 @@ static const char *disk_type_to_string(SkDiskType type) {
                 [SK_DISK_TYPE_SUNPLUS] = "Sunplus SCSI ATA Passthru",
                 [SK_DISK_TYPE_JMICRON] = "JMicron SCSI ATA Passthru",
                 [SK_DISK_TYPE_BLOB] = "Blob",
-                [SK_DISK_TYPE_UNKNOWN] = "Unknown"
+                [SK_DISK_TYPE_AUTO] = "Automatic",
+                [SK_DISK_TYPE_NONE] = "None"
         };
         /* %STRINGPOOLSTOP% */
 
@@ -156,6 +158,55 @@ static const char *disk_type_to_string(SkDiskType type) {
                 return NULL;
 
         return _P(map[type]);
+}
+
+static const char *disk_type_to_prefix_string(SkDiskType type) {
+
+        /* %STRINGPOOLSTART% */
+        static const char* const map[_SK_DISK_TYPE_MAX] = {
+                [SK_DISK_TYPE_ATA_PASSTHROUGH_16] = "sat16",
+                [SK_DISK_TYPE_ATA_PASSTHROUGH_12] = "sat12",
+                [SK_DISK_TYPE_LINUX_IDE] = "linux-ide",
+                [SK_DISK_TYPE_SUNPLUS] = "sunplus",
+                [SK_DISK_TYPE_JMICRON] = "jmicron",
+                [SK_DISK_TYPE_NONE] = "none",
+                [SK_DISK_TYPE_AUTO] = "auto",
+        };
+        /* %STRINGPOOLSTOP% */
+
+        if (type >= _SK_DISK_TYPE_MAX)
+                return NULL;
+
+        return _P(map[type]);
+}
+
+static const char *disk_type_from_string(const char *s, SkDiskType *type) {
+        unsigned u;
+
+        assert(s);
+        assert(type);
+
+        for (u = 0; u < _SK_DISK_TYPE_MAX; u++) {
+                const char *t;
+                size_t l;
+
+                if (!(t = disk_type_to_prefix_string(u)))
+                        continue;
+
+                l = strlen(t);
+
+                if (strncmp(s, t, l))
+                        continue;
+
+                if (s[l] != ':')
+                        continue;
+
+                *type = u;
+
+                return s + l + 1;
+        }
+
+        return NULL;
 }
 
 static SkBool disk_smart_is_available(SkDisk *d) {
@@ -640,7 +691,8 @@ static int disk_command(SkDisk *d, SkAtaCommand command, SkDirection direction, 
                 [SK_DISK_TYPE_SUNPLUS] = disk_sunplus_command,
                 [SK_DISK_TYPE_JMICRON] = disk_jmicron_command,
                 [SK_DISK_TYPE_BLOB] = NULL,
-                [SK_DISK_TYPE_UNKNOWN] = NULL
+                [SK_DISK_TYPE_AUTO] = NULL,
+                [SK_DISK_TYPE_NONE] = NULL
         };
 
         assert(d);
@@ -2066,7 +2118,7 @@ int sk_disk_dump(SkDisk *d) {
         printf("Device: %s\n"
                "Type: %s\n",
                d->name ? d->name : "n/a",
-               disk_type_to_string(d->type));
+               disk_type_to_human_string(d->type));
 
         ret = sk_disk_get_size(d, &size);
         if (ret >= 0)
@@ -2267,7 +2319,7 @@ static int disk_find_type(SkDisk *d, dev_t devnum) {
         else if (udev_device_get_parent_with_subsystem_devtype(dev, "scsi", NULL))
                 d->type = SK_DISK_TYPE_ATA_PASSTHROUGH_16;
         else
-                d->type = SK_DISK_TYPE_UNKNOWN;
+                d->type = SK_DISK_TYPE_AUTO;
 
         r = 0;
 
@@ -2293,18 +2345,25 @@ int sk_disk_open(const char *name, SkDisk **_d) {
                 goto fail;
         }
 
-        if (!name) {
-                d->fd = -1;
-                d->type = SK_DISK_TYPE_BLOB;
-                d->size = (uint64_t) -1;
-        } else {
+        d->fd = -1;
+        d->size = (uint64_t) -1;
 
-                if (!(d->name = strdup(name))) {
+        if (!name)
+                d->type = SK_DISK_TYPE_BLOB;
+        else {
+                const char *dn;
+
+                d->type = SK_DISK_TYPE_AUTO;
+
+                if (!(dn = disk_type_from_string(name, &d->type)))
+                        dn = name;
+
+                if (!(d->name = strdup(dn))) {
                         errno = ENOMEM;
                         goto fail;
                 }
 
-                if ((d->fd = open(name,
+                if ((d->fd = open(d->name,
                                   O_RDONLY|O_NOCTTY|O_NONBLOCK
 #ifdef O_CLOEXEC
                                   |O_CLOEXEC
@@ -2335,16 +2394,17 @@ int sk_disk_open(const char *name, SkDisk **_d) {
                 }
 
                 /* OK, it's a real block device with a size. Now let's find the suitable API */
-                if ((ret = disk_find_type(d, st.st_rdev)) < 0)
-                        goto fail;
+                if (d->type == SK_DISK_TYPE_AUTO)
+                        if ((ret = disk_find_type(d, st.st_rdev)) < 0)
+                                goto fail;
 
-                if (d->type == SK_DISK_TYPE_UNKNOWN) {
+                if (d->type == SK_DISK_TYPE_AUTO) {
                         /* We have no clue, so let's autotest for a working API */
                         for (d->type = 0; d->type < _SK_DISK_TYPE_TEST_MAX; d->type++)
                                 if (disk_identify_device(d) >= 0)
                                         break;
                         if (d->type >= _SK_DISK_TYPE_TEST_MAX)
-                                d->type = SK_DISK_TYPE_UNKNOWN;
+                                d->type = SK_DISK_TYPE_NONE;
                 } else
                         disk_identify_device(d);
 
