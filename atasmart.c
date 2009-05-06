@@ -64,7 +64,7 @@ typedef enum SkDiskType {
         /* These three will be autotested for: */
         SK_DISK_TYPE_ATA_PASSTHROUGH_12, /* ATA passthrough over SCSI transport, 12-byte version */
         SK_DISK_TYPE_ATA_PASSTHROUGH_16, /* ATA passthrough over SCSI transport, 16-byte version */
-        SK_DISK_TYPE_ATA,                /* Classic Linux /dev/hda ioctls */
+        SK_DISK_TYPE_LINUX_IDE,          /* Classic Linux /dev/hda ioctls */
 
         /* These three will not be autotested for */
         SK_DISK_TYPE_SUNPLUS,            /* SunPlus USB/ATA bridges */
@@ -144,7 +144,7 @@ static const char *disk_type_to_string(SkDiskType type) {
         static const char* const map[_SK_DISK_TYPE_MAX] = {
                 [SK_DISK_TYPE_ATA_PASSTHROUGH_16] = "16 Byte SCSI ATA SAT Passthru",
                 [SK_DISK_TYPE_ATA_PASSTHROUGH_12] = "12 Byte SCSI ATA SAT Passthru",
-                [SK_DISK_TYPE_ATA] = "Native Linux ATA",
+                [SK_DISK_TYPE_LINUX_IDE] = "Native Linux IDE",
                 [SK_DISK_TYPE_SUNPLUS] = "Sunplus SCSI ATA Passthru",
                 [SK_DISK_TYPE_JMICRON] = "JMicron SCSI ATA Passthru",
                 [SK_DISK_TYPE_BLOB] = "Blob",
@@ -189,11 +189,11 @@ static SkBool disk_smart_is_abort_test_available(SkDisk *d) {
         return !!(d->smart_data[367] & 41);
 }
 
-static int disk_ata_command(SkDisk *d, SkAtaCommand command, SkDirection direction, void* cmd_data, void* data, size_t *len) {
+static int disk_linux_ide_command(SkDisk *d, SkAtaCommand command, SkDirection direction, void* cmd_data, void* data, size_t *len) {
         uint8_t *bytes = cmd_data;
         int ret;
 
-        assert(d->type == SK_DISK_TYPE_ATA);
+        assert(d->type == SK_DISK_TYPE_LINUX_IDE);
 
         switch (direction) {
 
@@ -634,7 +634,7 @@ static int disk_jmicron_command(SkDisk *d, SkAtaCommand command, SkDirection dir
 static int disk_command(SkDisk *d, SkAtaCommand command, SkDirection direction, void* cmd_data, void* data, size_t *len) {
 
         static int (* const disk_command_table[_SK_DISK_TYPE_MAX]) (SkDisk *d, SkAtaCommand command, SkDirection direction, void* cmd_data, void* data, size_t *len) = {
-                [SK_DISK_TYPE_ATA] = disk_ata_command,
+                [SK_DISK_TYPE_LINUX_IDE] = disk_linux_ide_command,
                 [SK_DISK_TYPE_ATA_PASSTHROUGH_12] = disk_passthrough_12_command,
                 [SK_DISK_TYPE_ATA_PASSTHROUGH_16] = disk_passthrough_16_command,
                 [SK_DISK_TYPE_SUNPLUS] = disk_sunplus_command,
@@ -2263,7 +2263,7 @@ static int disk_find_type(SkDisk *d, dev_t devnum) {
                         d->type = SK_DISK_TYPE_ATA_PASSTHROUGH_12;
 
         } else if (udev_device_get_parent_with_subsystem_devtype(dev, "ide", NULL))
-                d->type = SK_DISK_TYPE_ATA;
+                d->type = SK_DISK_TYPE_LINUX_IDE;
         else if (udev_device_get_parent_with_subsystem_devtype(dev, "scsi", NULL))
                 d->type = SK_DISK_TYPE_ATA_PASSTHROUGH_16;
         else
