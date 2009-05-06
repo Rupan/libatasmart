@@ -1129,7 +1129,8 @@ static void make_pretty(SkSmartAttributeParsedData *a) {
                  !strcmp(a->name, "loaded-hours") ||
                  !strcmp(a->name, "head-flying-hours"))
                 a->pretty_value = (fourtyeight & 0xFFFFFFFFU) * 60 * 60 * 1000;
-        else if (!strcmp(a->name, "reallocated-sector-count"))
+        else if (!strcmp(a->name, "reallocated-sector-count") ||
+                 !strcmp(a->name, "current-pending-sector"))
                 a->pretty_value = fourtyeight & 0xFFFFFFFFU;
         else
                 a->pretty_value = fourtyeight;
