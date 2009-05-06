@@ -1205,7 +1205,10 @@ typedef enum SkSmartQuirk {
         SK_SMART_QUIRK_194_10XCELSIUS = 32,
         SK_SMART_QUIRK_194_UNKNOWN = 64,
         SK_SMART_QUIRK_200_WRITEERRORCOUNT = 128,
-        SK_SMART_QUIRK_201_DETECTEDTACOUNT = 256
+        SK_SMART_QUIRK_201_DETECTEDTACOUNT = 256,
+        SK_SMART_QUIRK_9_UNKNOWN = 512,
+        SK_SMART_QUIRK_197_UNKNOWN = 1024,
+        SK_SMART_QUIRK_198_UNKNOWN = 2048,
 } SkSmartQuirk;
 
 /* %STRINGPOOLSTART% */
@@ -1219,6 +1222,9 @@ static const char *quirk_name[] = {
         "194_UNKNOWN",
         "200_WRITEERRORCOUNT",
         "201_DETECTEDTACOUNT",
+        "9_UNKNOWN",
+        "197_UNKNOWN",
+        "198_UNKNOWN",
         NULL
 };
 /* %STRINGPOOLSTOP% */
@@ -1232,6 +1238,12 @@ typedef struct SkSmartQuirkDatabase {
 static const SkSmartQuirkDatabase quirk_database[] = { {
 
         /*** Fujitsu */
+                "^FUJITSU MHY2120BH$",
+                "^0085000B$", /* seems to be specific to this firmware */
+                SK_SMART_QUIRK_9_UNKNOWN|
+                SK_SMART_QUIRK_197_UNKNOWN|
+                SK_SMART_QUIRK_198_UNKNOWN
+        }, {
                 "^FUJITSU MHR2040AT$",
                 NULL,
                 SK_SMART_QUIRK_9_POWERONSECONDS|
@@ -1452,7 +1464,8 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
                                                 "power-on-half-minutes", SK_SMART_ATTRIBUTE_UNIT_MSECONDS
                                         };
                                         return &a;
-                                }
+                                } else if (quirk & SK_SMART_QUIRK_9_UNKNOWN)
+                                        return NULL;
                                 /* %STRINGPOOLSTOP% */
 
                                 break;
@@ -1479,6 +1492,18 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
                                 } else if (quirk & SK_SMART_QUIRK_194_UNKNOWN)
                                         return NULL;
                                 /* %STRINGPOOLSTOP% */
+
+                                break;
+
+                        case 197:
+                                if (quirk & SK_SMART_QUIRK_197_UNKNOWN)
+                                        return NULL;
+
+                                break;
+
+                        case 198:
+                                if (quirk & SK_SMART_QUIRK_198_UNKNOWN)
+                                        return NULL;
 
                                 break;
 
