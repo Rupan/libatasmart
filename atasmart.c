@@ -2275,6 +2275,7 @@ static int disk_find_type(SkDisk *d, dev_t devnum) {
         struct udev *udev;
         struct udev_device *dev = NULL, *usb;
         int r = -1;
+        const char *a;
 
         assert(d);
 
@@ -2285,6 +2286,27 @@ static int disk_find_type(SkDisk *d, dev_t devnum) {
 
         if (!(dev = udev_device_new_from_devnum(udev, 'b', devnum))) {
                 errno = ENODEV;
+                goto finish;
+        }
+
+        if ((a = udev_device_get_property_value(dev, "ID_ATA_SMART_ACCESS"))) {
+                unsigned u;
+
+                for (u = 0; u < _SK_DISK_TYPE_MAX; u++) {
+                        const char *t;
+
+                        if (!(t = disk_type_to_prefix_string(u)))
+                                continue;
+
+                        if (!strcmp(a, t)) {
+                                d->type = u;
+                                r = 0;
+                                goto finish;
+                        }
+                }
+
+                d->type = SK_DISK_TYPE_NONE;
+                r = 0;
                 goto finish;
         }
 
