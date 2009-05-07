@@ -2115,8 +2115,10 @@ int sk_disk_dump(SkDisk *d) {
 
         assert(d);
 
-        printf("Device: %s\n"
+        printf("Device: %s%s%s\n"
                "Type: %s\n",
+               d->name ? disk_type_to_prefix_string(d->type) : "",
+               d->name ? ":" : "",
                d->name ? d->name : "n/a",
                disk_type_to_human_string(d->type));
 
