@@ -24,6 +24,7 @@ EXTRA_DIST = \
 	atasmart.c \
 	blob-examples/README \
 	blob-examples/FUJITSU_MHY2120BH--0084000D \
+	blob-examples/FUJITSU_MHY2120BH--0085000B \
 	blob-examples/FUJITSU_MHZ2160BH_G1--0084000A \
 	blob-examples/Maxtor_96147H8--BAC51KJ0 \
 	blob-examples/SAMSUNG_HD501LJ--CR100-12 \
