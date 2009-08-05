@@ -1249,18 +1249,19 @@ static const SkSmartAttributeInfo const attribute_info[256] = {
 /* %STRINGPOOLSTOP% */
 
 typedef enum SkSmartQuirk {
-        SK_SMART_QUIRK_9_POWERONMINUTES = 1,
-        SK_SMART_QUIRK_9_POWERONSECONDS = 2,
-        SK_SMART_QUIRK_9_POWERONHALFMINUTES = 4,
-        SK_SMART_QUIRK_192_EMERGENCYRETRACTCYCLECT = 8,
-        SK_SMART_QUIRK_193_LOADUNLOAD = 16,
-        SK_SMART_QUIRK_194_10XCELSIUS = 32,
-        SK_SMART_QUIRK_194_UNKNOWN = 64,
-        SK_SMART_QUIRK_200_WRITEERRORCOUNT = 128,
-        SK_SMART_QUIRK_201_DETECTEDTACOUNT = 256,
-        SK_SMART_QUIRK_9_UNKNOWN = 512,
-        SK_SMART_QUIRK_197_UNKNOWN = 1024,
-        SK_SMART_QUIRK_198_UNKNOWN = 2048,
+        SK_SMART_QUIRK_9_POWERONMINUTES            = 0x0001,
+        SK_SMART_QUIRK_9_POWERONSECONDS            = 0x0002,
+        SK_SMART_QUIRK_9_POWERONHALFMINUTES        = 0x0004,
+        SK_SMART_QUIRK_192_EMERGENCYRETRACTCYCLECT = 0x0008,
+        SK_SMART_QUIRK_193_LOADUNLOAD              = 0x0010,
+        SK_SMART_QUIRK_194_10XCELSIUS              = 0x0020,
+        SK_SMART_QUIRK_194_UNKNOWN                 = 0x0040,
+        SK_SMART_QUIRK_200_WRITEERRORCOUNT         = 0x0080,
+        SK_SMART_QUIRK_201_DETECTEDTACOUNT         = 0x0100,
+        SK_SMART_QUIRK_5_UNKNOWN                   = 0x0200,
+        SK_SMART_QUIRK_9_UNKNOWN                   = 0x0400,
+        SK_SMART_QUIRK_197_UNKNOWN                 = 0x0800,
+        SK_SMART_QUIRK_198_UNKNOWN                 = 0x1000,
 } SkSmartQuirk;
 
 /* %STRINGPOOLSTART% */
@@ -1274,6 +1275,7 @@ static const char *quirk_name[] = {
         "194_UNKNOWN",
         "200_WRITEERRORCOUNT",
         "201_DETECTEDTACOUNT",
+        "5_UNKNOWN",
         "9_UNKNOWN",
         "197_UNKNOWN",
         "198_UNKNOWN",
@@ -1414,7 +1416,10 @@ static const SkSmartQuirkDatabase quirk_database[] = { {
                 SK_SMART_QUIRK_9_POWERONMINUTES|
                 SK_SMART_QUIRK_193_LOADUNLOAD
         }, {
-
+                "^HTS541010G9SA00$",
+                "^MBZOC60P$",
+                SK_SMART_QUIRK_5_UNKNOWN
+        }, {
                 NULL,
                 NULL,
                 0
@@ -1496,6 +1501,12 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
 
         if (quirk) {
                 switch (id) {
+
+                        case 5:
+                                if (quirk & SK_SMART_QUIRK_5_UNKNOWN)
+                                        return NULL;
+
+                                break;
 
                         case 9:
                                 /* %STRINGPOOLSTART% */
