@@ -28,7 +28,7 @@ AC_CONFIG_MACRO_DIR(m4)
 
 AM_INIT_AUTOMAKE([foreign 1.9 -Wall])
 
-AC_SUBST(PACKAGE_URL, [https://http://git.0pointer.de/?p=libatasmart.git])
+AC_SUBST(PACKAGE_URL, [http://git.0pointer.de/?p=libatasmart.git])
 
 AC_SUBST(LIBATASMART_VERSION_INFO, [3:3:3])
 
