@@ -1360,7 +1360,10 @@ typedef struct SkSmartQuirkDatabase {
 static const SkSmartQuirkDatabase quirk_database[] = { {
 
         /*** Fujitsu */
-                "^FUJITSU MHY2120BH$",
+                "^("
+                "FUJITSU MHY2120BH|"
+                "FUJITSU MHY2250BH"
+                ")$",
                 "^0085000B$", /* seems to be specific to this firmware */
                 SK_SMART_QUIRK_9_UNKNOWN|
                 SK_SMART_QUIRK_197_UNKNOWN|
