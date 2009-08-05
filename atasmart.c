@@ -115,6 +115,8 @@ struct SkDisk {
         SkBool blob_smart_status:1;
         SkBool blob_smart_status_valid:1;
 
+        SkBool attribute_verification_failed:1;
+
         SkIdentifyParsedData identify_parsed_data;
         SkSmartParsedData smart_parsed_data;
 
@@ -138,6 +140,14 @@ typedef enum SkSmartCommand {
         SK_SMART_COMMAND_DISABLE_OPERATIONS = 0xD9,
         SK_SMART_COMMAND_RETURN_STATUS = 0xDA
 } SkSmartCommand;
+
+/* Hmm, if the data we parse is out of a certain range just consider it misparsed */
+#define SK_MKELVIN_VALID_MIN ((uint64_t) ((-15LL*1000LL) + 273150LL))
+#define SK_MKELVIN_VALID_MAX ((uint64_t) ((100LL*1000LL) + 273150LL))
+
+#define SK_MSECOND_VALID_MIN 1ULL
+#define SK_MSECOND_VALID_SHORT_MAX (60ULL * 60ULL * 1000ULL)
+#define SK_MSECOND_VALID_LONG_MAX (30ULL * 365ULL * 24ULL * 60ULL * 60ULL * 1000ULL)
 
 static const char *disk_type_to_human_string(SkDiskType type) {
 
@@ -1188,63 +1198,121 @@ static void make_pretty(SkSmartAttributeParsedData *a) {
                 a->pretty_value = fourtyeight;
 }
 
+typedef void (*SkSmartAttributeVerify)(SkDisk *d, SkSmartAttributeParsedData *a);
+
 typedef struct SkSmartAttributeInfo {
         const char *name;
         SkSmartAttributeUnit unit;
+        SkSmartAttributeVerify verify;
 } SkSmartAttributeInfo;
+
+static void verify_temperature(SkDisk *d, SkSmartAttributeParsedData *a) {
+        assert(a);
+        assert(a->pretty_unit == SK_SMART_ATTRIBUTE_UNIT_MKELVIN);
+
+        if (a->pretty_value < SK_MKELVIN_VALID_MIN ||
+            a->pretty_value > SK_MKELVIN_VALID_MAX) {
+                a->pretty_unit = SK_SMART_ATTRIBUTE_UNIT_UNKNOWN;
+                d->attribute_verification_failed = TRUE;
+        }
+}
+
+static void verify_short_time(SkDisk *d, SkSmartAttributeParsedData *a) {
+        assert(a);
+        assert(a->pretty_unit == SK_SMART_ATTRIBUTE_UNIT_MSECONDS);
+
+        if (a->pretty_value < SK_MSECOND_VALID_MIN ||
+            a->pretty_value > SK_MSECOND_VALID_SHORT_MAX) {
+                a->pretty_unit = SK_SMART_ATTRIBUTE_UNIT_UNKNOWN;
+                d->attribute_verification_failed = TRUE;
+        }
+}
+
+static void verify_long_time(SkDisk *d, SkSmartAttributeParsedData *a) {
+        assert(a);
+        assert(a->pretty_unit == SK_SMART_ATTRIBUTE_UNIT_MSECONDS);
+
+        if (a->pretty_value < SK_MSECOND_VALID_MIN ||
+            a->pretty_value > SK_MSECOND_VALID_LONG_MAX) {
+                a->pretty_unit = SK_SMART_ATTRIBUTE_UNIT_UNKNOWN;
+                d->attribute_verification_failed = TRUE;
+        }
+}
+
+static void verify_sectors(SkDisk *d, SkSmartAttributeParsedData *a) {
+        uint64_t max_sectors;
+
+        assert(d);
+        assert(a);
+        assert(a->pretty_unit == SK_SMART_ATTRIBUTE_UNIT_SECTORS);
+
+        max_sectors = d->size / 512ULL;
+
+        if (max_sectors > 0 && a->pretty_value > max_sectors) {
+                a->pretty_value = SK_SMART_ATTRIBUTE_UNIT_UNKNOWN;
+                d->attribute_verification_failed = TRUE;
+        } else {
+                if ((!strcmp(a->name, "reallocated-sector-count") ||
+                     !strcmp(a->name, "current-pending-sector")) &&
+                    a->pretty_value > 0) {
+                        a->good = FALSE;
+                        a->good_valid = TRUE;
+                }
+        }
+}
 
 /* This data is stolen from smartmontools */
 
 /* %STRINGPOOLSTART% */
 static const SkSmartAttributeInfo const attribute_info[256] = {
-        [1]   = { "raw-read-error-rate",         SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [2]   = { "throughput-performance",      SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
-        [3]   = { "spin-up-time",                SK_SMART_ATTRIBUTE_UNIT_MSECONDS },
-        [4]   = { "start-stop-count",            SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [5]   = { "reallocated-sector-count",    SK_SMART_ATTRIBUTE_UNIT_SECTORS },
-        [6]   = { "read-channel-margin",         SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
-        [7]   = { "seek-error-rate",             SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [8]   = { "seek-time-performance",       SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
-        [9]   = { "power-on-hours",              SK_SMART_ATTRIBUTE_UNIT_MSECONDS },
-        [10]  = { "spin-retry-count",            SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [11]  = { "calibration-retry-count",     SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [12]  = { "power-cycle-count",           SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [13]  = { "read-soft-error-rate",        SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [187] = { "reported-uncorrect",          SK_SMART_ATTRIBUTE_UNIT_SECTORS },
-        [189] = { "high-fly-writes",             SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [190] = { "airflow-temperature-celsius", SK_SMART_ATTRIBUTE_UNIT_MKELVIN },
-        [191] = { "g-sense-error-rate",          SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [192] = { "power-off-retract-count",     SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [193] = { "load-cycle-count",            SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [194] = { "temperature-celsius-2",       SK_SMART_ATTRIBUTE_UNIT_MKELVIN },
-        [195] = { "hardware-ecc-recovered",      SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [196] = { "reallocated-event-count",     SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [197] = { "current-pending-sector",      SK_SMART_ATTRIBUTE_UNIT_SECTORS },
-        [198] = { "offline-uncorrectable",       SK_SMART_ATTRIBUTE_UNIT_SECTORS },
-        [199] = { "udma-crc-error-count",        SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [200] = { "multi-zone-error-rate",       SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [201] = { "soft-read-error-rate",        SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [202] = { "ta-increase-count",           SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [203] = { "run-out-cancel",              SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
-        [204] = { "shock-count-write-open",      SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [205] = { "shock-rate-write-open",       SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [206] = { "flying-height",               SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
-        [207] = { "spin-high-current",           SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
-        [208] = { "spin-buzz",                   SK_SMART_ATTRIBUTE_UNIT_UNKNOWN},
-        [209] = { "offline-seek-performance",    SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
-        [220] = { "disk-shift",                  SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
-        [221] = { "g-sense-error-rate-2",        SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [222] = { "loaded-hours",                SK_SMART_ATTRIBUTE_UNIT_MSECONDS },
-        [223] = { "load-retry-count",            SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [224] = { "load-friction",               SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
-        [225] = { "load-cycle-count-2",          SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [226] = { "load-in-time",                SK_SMART_ATTRIBUTE_UNIT_MSECONDS },
-        [227] = { "torq-amp-count",              SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [228] = { "power-off-retract-count-2",   SK_SMART_ATTRIBUTE_UNIT_NONE },
-        [230] = { "head-amplitude",              SK_SMART_ATTRIBUTE_UNIT_UNKNOWN },
-        [231] = { "temperature-celsius",         SK_SMART_ATTRIBUTE_UNIT_MKELVIN },
-        [240] = { "head-flying-hours",           SK_SMART_ATTRIBUTE_UNIT_MSECONDS },
-        [250] = { "read-error-retry-rate",       SK_SMART_ATTRIBUTE_UNIT_NONE }
+        [1]   = { "raw-read-error-rate",         SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [2]   = { "throughput-performance",      SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
+        [3]   = { "spin-up-time",                SK_SMART_ATTRIBUTE_UNIT_MSECONDS, verify_short_time },
+        [4]   = { "start-stop-count",            SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [5]   = { "reallocated-sector-count",    SK_SMART_ATTRIBUTE_UNIT_SECTORS,  verify_sectors },
+        [6]   = { "read-channel-margin",         SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
+        [7]   = { "seek-error-rate",             SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [8]   = { "seek-time-performance",       SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
+        [9]   = { "power-on-hours",              SK_SMART_ATTRIBUTE_UNIT_MSECONDS, verify_long_time },
+        [10]  = { "spin-retry-count",            SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [11]  = { "calibration-retry-count",     SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [12]  = { "power-cycle-count",           SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [13]  = { "read-soft-error-rate",        SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [187] = { "reported-uncorrect",          SK_SMART_ATTRIBUTE_UNIT_SECTORS,  verify_sectors },
+        [189] = { "high-fly-writes",             SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [190] = { "airflow-temperature-celsius", SK_SMART_ATTRIBUTE_UNIT_MKELVIN,  verify_temperature },
+        [191] = { "g-sense-error-rate",          SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [192] = { "power-off-retract-count",     SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [193] = { "load-cycle-count",            SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [194] = { "temperature-celsius-2",       SK_SMART_ATTRIBUTE_UNIT_MKELVIN,  verify_temperature },
+        [195] = { "hardware-ecc-recovered",      SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [196] = { "reallocated-event-count",     SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [197] = { "current-pending-sector",      SK_SMART_ATTRIBUTE_UNIT_SECTORS,  verify_sectors },
+        [198] = { "offline-uncorrectable",       SK_SMART_ATTRIBUTE_UNIT_SECTORS,  verify_sectors },
+        [199] = { "udma-crc-error-count",        SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [200] = { "multi-zone-error-rate",       SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [201] = { "soft-read-error-rate",        SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [202] = { "ta-increase-count",           SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [203] = { "run-out-cancel",              SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
+        [204] = { "shock-count-write-open",      SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [205] = { "shock-rate-write-open",       SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [206] = { "flying-height",               SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
+        [207] = { "spin-high-current",           SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
+        [208] = { "spin-buzz",                   SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
+        [209] = { "offline-seek-performance",    SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
+        [220] = { "disk-shift",                  SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
+        [221] = { "g-sense-error-rate-2",        SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [222] = { "loaded-hours",                SK_SMART_ATTRIBUTE_UNIT_MSECONDS, verify_long_time },
+        [223] = { "load-retry-count",            SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [224] = { "load-friction",               SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
+        [225] = { "load-cycle-count-2",          SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [226] = { "load-in-time",                SK_SMART_ATTRIBUTE_UNIT_MSECONDS, verify_short_time },
+        [227] = { "torq-amp-count",              SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [228] = { "power-off-retract-count-2",   SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [230] = { "head-amplitude",              SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
+        [231] = { "temperature-celsius",         SK_SMART_ATTRIBUTE_UNIT_MKELVIN,  verify_temperature },
+        [240] = { "head-flying-hours",           SK_SMART_ATTRIBUTE_UNIT_MSECONDS, verify_long_time },
+        [250] = { "read-error-retry-rate",       SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL }
 };
 /* %STRINGPOOLSTOP% */
 
@@ -1512,19 +1580,19 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
                                 /* %STRINGPOOLSTART% */
                                 if (quirk & SK_SMART_QUIRK_9_POWERONMINUTES) {
                                         static const SkSmartAttributeInfo a = {
-                                                "power-on-minutes", SK_SMART_ATTRIBUTE_UNIT_MSECONDS
+                                                "power-on-minutes", SK_SMART_ATTRIBUTE_UNIT_MSECONDS, verify_long_time
                                         };
                                         return &a;
 
                                 } else if (quirk & SK_SMART_QUIRK_9_POWERONSECONDS) {
                                         static const SkSmartAttributeInfo a = {
-                                                "power-on-seconds", SK_SMART_ATTRIBUTE_UNIT_MSECONDS
+                                                "power-on-seconds", SK_SMART_ATTRIBUTE_UNIT_MSECONDS, verify_long_time
                                         };
                                         return &a;
 
                                 } else if (quirk & SK_SMART_QUIRK_9_POWERONHALFMINUTES) {
                                         static const SkSmartAttributeInfo a = {
-                                                "power-on-half-minutes", SK_SMART_ATTRIBUTE_UNIT_MSECONDS
+                                                "power-on-half-minutes", SK_SMART_ATTRIBUTE_UNIT_MSECONDS, verify_long_time
                                         };
                                         return &a;
                                 } else if (quirk & SK_SMART_QUIRK_9_UNKNOWN)
@@ -1537,7 +1605,7 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
                                 /* %STRINGPOOLSTART% */
                                 if (quirk & SK_SMART_QUIRK_192_EMERGENCYRETRACTCYCLECT) {
                                         static const SkSmartAttributeInfo a = {
-                                                "emergency-retract-cycle-count", SK_SMART_ATTRIBUTE_UNIT_NONE
+                                                "emergency-retract-cycle-count", SK_SMART_ATTRIBUTE_UNIT_NONE, NULL
                                         };
                                         return &a;
                                 }
@@ -1549,7 +1617,7 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
                                 /* %STRINGPOOLSTART% */
                                 if (quirk & SK_SMART_QUIRK_194_10XCELSIUS) {
                                         static const SkSmartAttributeInfo a = {
-                                                "temperature-centi-celsius", SK_SMART_ATTRIBUTE_UNIT_MKELVIN
+                                                "temperature-centi-celsius", SK_SMART_ATTRIBUTE_UNIT_MKELVIN, verify_temperature
                                         };
                                         return &a;
                                 } else if (quirk & SK_SMART_QUIRK_194_UNKNOWN)
@@ -1574,7 +1642,7 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
                                 /* %STRINGPOOLSTART% */
                                 if (quirk & SK_SMART_QUIRK_200_WRITEERRORCOUNT) {
                                         static const SkSmartAttributeInfo a = {
-                                                "write-error-count", SK_SMART_ATTRIBUTE_UNIT_NONE
+                                                "write-error-count", SK_SMART_ATTRIBUTE_UNIT_NONE, NULL
                                         };
                                         return &a;
                                 }
@@ -1586,7 +1654,7 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
                                 /* %STRINGPOOLSTART% */
                                 if (quirk & SK_SMART_QUIRK_201_DETECTEDTACOUNT) {
                                         static const SkSmartAttributeInfo a = {
-                                                "detected-ta-count", SK_SMART_ATTRIBUTE_UNIT_NONE
+                                                "detected-ta-count", SK_SMART_ATTRIBUTE_UNIT_NONE, NULL
                                         };
                                         return &a;
                                 }
@@ -1752,14 +1820,8 @@ int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, 
 
                 find_threshold(d, &a);
 
-                /* Handle a few fields specially */
-                if ((!strcmp(a.name, "reallocated-sector-count") ||
-                     !strcmp(a.name, "current-pending-sector")) &&
-                    a.pretty_unit == SK_SMART_ATTRIBUTE_UNIT_SECTORS &&
-                    a.pretty_value > 0) {
-                        a.good = FALSE;
-                        a.good_valid = TRUE;
-                }
+                if (i && i->verify)
+                        i->verify(d, &a);
 
                 cb(d, &a, userdata);
                 free(an);
@@ -2166,7 +2228,6 @@ int sk_disk_dump(SkDisk *d) {
                                 printf(" %s", _P(quirk_name[i]));
 
                 printf("\n");
-
         }
 
         ret = sk_disk_check_sleep_mode(d, &awake);
@@ -2240,6 +2301,9 @@ int sk_disk_dump(SkDisk *d) {
                         printf("Temperature: %s\n", strerror(errno));
                 else
                         printf("Temperature: %s\n", print_value(pretty, sizeof(pretty), value, SK_SMART_ATTRIBUTE_UNIT_MKELVIN));
+
+                printf("Attribute Parsing Verification: %s\n",
+                       d->attribute_verification_failed ? "Bad" : "Good");
 
                 if (sk_disk_smart_get_overall(d, &overall) < 0)
                         printf("Overall Status: %s\n", strerror(errno));
