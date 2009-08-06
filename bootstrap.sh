@@ -18,7 +18,7 @@
 # License along with libatasmart. If not, If not, see
 # <http://www.gnu.org/licenses/>.
 
-VERSION=1.9
+VERSION=1.11
 
 run_versioned() {
     local P
@@ -55,8 +55,8 @@ else
     mkdir -p m4
     "$LIBTOOLIZE" -c --force
     run_versioned aclocal "$VERSION"
-    run_versioned autoconf 2.59 -Wall
-    run_versioned autoheader 2.59
+    run_versioned autoconf 2.63 -Wall
+    run_versioned autoheader 2.63
     run_versioned automake "$VERSION" --copy --foreign --add-missing
 
     if test "x$NOCONFIGURE" = "x"; then
