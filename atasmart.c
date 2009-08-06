@@ -1254,10 +1254,8 @@ static void verify_sectors(SkDisk *d, SkSmartAttributeParsedData *a) {
         } else {
                 if ((!strcmp(a->name, "reallocated-sector-count") ||
                      !strcmp(a->name, "current-pending-sector")) &&
-                    a->pretty_value > 0) {
-                        a->good = FALSE;
-                        a->good_valid = TRUE;
-                }
+                    a->pretty_value > 0)
+                        a->warn = TRUE;
         }
 }
 
@@ -1739,41 +1737,50 @@ static void find_threshold(SkDisk *d, SkSmartAttributeParsedData *a) {
         uint8_t *p;
         unsigned n;
 
-        if (!d->smart_thresholds_valid) {
-                a->threshold_valid = FALSE;
-                return;
-        }
+        if (!d->smart_thresholds_valid)
+                goto fail;
 
         for (n = 0, p = d->smart_thresholds+2; n < 30; n++, p+=12)
                 if (p[0] == a->id)
                         break;
 
-        if (n >= 30) {
-                a->threshold_valid = FALSE;
-                a->good_valid = FALSE;
-                return;
-        }
+        if (n >= 30)
+                goto fail;
 
         a->threshold = p[1];
         a->threshold_valid = p[1] != 0xFE;
 
-        a->good_valid = FALSE;
-        a->good = TRUE;
+        a->good_now_valid = FALSE;
+        a->good_now = TRUE;
+        a->good_in_the_past_valid = FALSE;
+        a->good_in_the_past = TRUE;
 
         /* Always-Fail and Always-Passing thresholds are not relevant
          * for our assessment. */
         if (p[1] >= 1 && p[1] <= 0xFD) {
 
                 if (a->worst_value_valid) {
-                        a->good = a->good && (a->worst_value > a->threshold);
-                        a->good_valid = TRUE;
+                        a->good_in_the_past = a->good_in_the_past && (a->worst_value > a->threshold);
+                        a->good_in_the_past_valid = TRUE;
                 }
 
                 if (a->current_value_valid) {
-                        a->good = a->good && (a->current_value > a->threshold);
-                        a->good_valid = TRUE;
+                        a->good_now = a->good_now && (a->current_value > a->threshold);
+                        a->good_now_valid = TRUE;
                 }
         }
+
+        a->warn =
+                (a->good_now_valid && !a->good_now) ||
+                (a->good_in_the_past_valid && !a->good_in_the_past);
+
+        return;
+
+fail:
+        a->threshold_valid = FALSE;
+        a->good_now_valid = FALSE;
+        a->good_in_the_past_valid = FALSE;
+        a->warn = FALSE;
 }
 
 int sk_disk_smart_parse_attributes(SkDisk *d, SkSmartAttributeParseCallback cb, void* userdata) {
@@ -2035,9 +2042,11 @@ const char* sk_smart_overall_to_string(SkSmartOverall overall) {
         /* %STRINGPOOLSTART% */
         const char * const map[] = {
                 [SK_SMART_OVERALL_GOOD] = "GOOD",
+                [SK_SMART_OVERALL_BAD_ATTRIBUTE_IN_THE_PAST] = "BAD_ATTRIBUTE_IN_THE_PAST",
+                [SK_SMART_OVERALL_BAD_SECTOR] = "BAD_SECTOR",
+                [SK_SMART_OVERALL_BAD_ATTRIBUTE_NOW] = "BAD_ATTRIBUTE_NOW",
+                [SK_SMART_OVERALL_BAD_SECTOR_MANY] = "BAD_SECTOR_MANY",
                 [SK_SMART_OVERALL_BAD_STATUS] = "BAD_STATUS",
-                [SK_SMART_OVERALL_BAD_ATTRIBUTE] = "BAD_ATTRIBUTE",
-                [SK_SMART_OVERALL_BAD_SECTOR] = "BAD_SECTOR"
         };
         /* %STRINGPOOLSTOP% */
 
@@ -2047,18 +2056,39 @@ const char* sk_smart_overall_to_string(SkSmartOverall overall) {
         return _P(map[overall]);
 }
 
-static void bad_attribute_cb(SkDisk *d, const SkSmartAttributeParsedData *a, SkBool *good) {
-        if (a->prefailure && a->good_valid && !a->good)
+static void bad_attribute_now_cb(SkDisk *d, const SkSmartAttributeParsedData *a, SkBool *good) {
+        if (a->prefailure && a->good_now_valid && !a->good_now)
                 *good = FALSE;
+}
+
+static void bad_attribute_in_the_past_cb(SkDisk *d, const SkSmartAttributeParsedData *a, SkBool *good) {
+        if (a->prefailure && a->good_in_the_past_valid && !a->good_in_the_past)
+                *good = FALSE;
+}
+
+static uint64_t u64log2(uint64_t n) {
+        unsigned r;
+
+        if (n <= 1)
+                return 0;
+
+        r = 0;
+        for (;;) {
+                n = n >> 1;
+                if (!n)
+                        return r;
+                r++;
+        }
 }
 
 int sk_disk_smart_get_overall(SkDisk *d, SkSmartOverall *overall) {
         SkBool good;
-        uint64_t sectors;
+        uint64_t sectors, sector_threshold;
 
         assert(d);
         assert(overall);
 
+        /* First, check SMART self-assesment */
         if (sk_disk_smart_status(d, &good) < 0)
                 return -1;
 
@@ -2067,23 +2097,51 @@ int sk_disk_smart_get_overall(SkDisk *d, SkSmartOverall *overall) {
                 return 0;
         }
 
+        /* Second, check if the number of bad sectors is greater than
+         * a certain threshold */
         if (sk_disk_smart_get_bad(d, &sectors) < 0) {
                 if (errno != ENOENT)
                         return -1;
-        } else if (sectors > 0) {
+                sectors = 0;
+        } else {
+
+                /* We use log2(n_sectors) as a threshold here. We had to pick
+                 * something, and this makes a bit of sense, or doesn't it? */
+                sector_threshold = u64log2(d->size/512);
+
+                if (sectors >= sector_threshold) {
+                        *overall = SK_SMART_OVERALL_BAD_SECTOR_MANY;
+                        return 0;
+                }
+        }
+
+        /* Third, check if any of the SMART attributes is bad */
+        good = TRUE;
+        if (sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) bad_attribute_now_cb, &good) < 0)
+                return -1;
+
+        if (!good) {
+                *overall = SK_SMART_OVERALL_BAD_ATTRIBUTE_NOW;
+                return 0;
+        }
+
+        /* Fourth, check if there are any bad sectors at all */
+        if (sectors > 0) {
                 *overall = SK_SMART_OVERALL_BAD_SECTOR;
                 return 0;
         }
 
+        /* Fifth, check if any of the SMART attributes ever was bad */
         good = TRUE;
-        if (sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) bad_attribute_cb, &good) < 0)
+        if (sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) bad_attribute_in_the_past_cb, &good) < 0)
                 return -1;
 
         if (!good) {
-                *overall = SK_SMART_OVERALL_BAD_ATTRIBUTE;
+                *overall = SK_SMART_OVERALL_BAD_ATTRIBUTE_IN_THE_PAST;
                 return 0;
         }
 
+        /* Sixth, there's really nothing to complain about, so give it a pass */
         *overall = SK_SMART_OVERALL_GOOD;
         return 0;
 }
@@ -2163,12 +2221,12 @@ static void disk_dump_attributes(SkDisk *d, const SkSmartAttributeParsedData *a,
         snprintf(tc, sizeof(tc), "%3u", a->current_value);
         tc[sizeof(tc)-1] = 0;
 
-        highlight = a->good_valid && !a->good && isatty(1);
+        highlight = a->warn && isatty(1);
 
         if (highlight)
                 fprintf(stderr, HIGHLIGHT);
 
-        printf("%3u %-27s %-3s   %-3s   %-3s   %-11s 0x%02x%02x%02x%02x%02x%02x %-7s %-7s %-3s\n",
+        printf("%3u %-27s %-3s   %-3s   %-3s   %-11s 0x%02x%02x%02x%02x%02x%02x %-7s %-7s %-4s %-4s\n",
                a->id,
                print_name(name, sizeof(name), a->id, a->name),
                a->current_value_valid ? tc : "n/a",
@@ -2178,7 +2236,8 @@ static void disk_dump_attributes(SkDisk *d, const SkSmartAttributeParsedData *a,
                a->raw[0], a->raw[1], a->raw[2], a->raw[3], a->raw[4], a->raw[5],
                a->prefailure ? "prefail" : "old-age",
                a->online ? "online" : "offline",
-               a->good_valid ? yes_no(a->good) : "n/a");
+               a->good_now_valid ? yes_no(a->good_now) : "n/a",
+               a->good_in_the_past_valid ? yes_no(a->good_in_the_past) : "n/a");
 
         if (highlight)
                 fprintf(stderr, ENDHIGHLIGHT);
@@ -2316,7 +2375,7 @@ int sk_disk_dump(SkDisk *d) {
                                sk_smart_overall_to_string(overall),
                                overall != SK_SMART_OVERALL_GOOD ? ENDHIGHLIGHT : "");
 
-                printf("%3s %-27s %5s %5s %5s %-11s %-14s %-7s %-7s %-3s\n",
+                printf("%3s %-27s %5s %5s %5s %-11s %-14s %-7s %-7s %-4s %-4s\n",
                        "ID#",
                        "Name",
                        "Value",
@@ -2326,7 +2385,8 @@ int sk_disk_dump(SkDisk *d) {
                        "Raw",
                        "Type",
                        "Updates",
-                       "Good");
+                       "Good",
+                       "Good/Past");
 
                 if ((ret = sk_disk_smart_parse_attributes(d, disk_dump_attributes, NULL)) < 0)
                         return ret;

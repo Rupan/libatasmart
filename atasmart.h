@@ -157,8 +157,10 @@ typedef struct SkSmartAttributeParsedData {
         SkBool prefailure:1;
 
         /* Volatile data */
-        SkBool good:1, good_valid:1;
+        SkBool good_now:1, good_now_valid:1;
+        SkBool good_in_the_past:1, good_in_the_past_valid:1;
         SkBool current_value_valid:1, worst_value_valid:1;
+        SkBool warn:1;
         uint8_t current_value, worst_value;
         uint64_t pretty_value;
         uint8_t raw[6];
@@ -171,9 +173,11 @@ typedef struct SkDisk SkDisk;
 
 typedef enum SkSmartOverall  {
         SK_SMART_OVERALL_GOOD,
-        SK_SMART_OVERALL_BAD_STATUS,     /* Smart Self Assessment negative */
-        SK_SMART_OVERALL_BAD_SECTOR,     /* At least one bad sector */
-        SK_SMART_OVERALL_BAD_ATTRIBUTE,  /* At least one pre-fail attribute exceeded its threshold in the past or now */
+        SK_SMART_OVERALL_BAD_ATTRIBUTE_IN_THE_PAST,  /* At least one pre-fail attribute exceeded its threshold in the past */
+        SK_SMART_OVERALL_BAD_SECTOR,                 /* At least one bad sector */
+        SK_SMART_OVERALL_BAD_ATTRIBUTE_NOW,          /* At least one pre-fail attribute is exceeding its threshold now */
+        SK_SMART_OVERALL_BAD_SECTOR_MANY,            /* Many bad sectors */
+        SK_SMART_OVERALL_BAD_STATUS,                 /* Smart Self Assessment negative */
         _SK_SMART_OVERALL_MAX
 
         /* This enum may be extended at any time without this being
