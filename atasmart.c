@@ -1182,7 +1182,7 @@ static void make_pretty(SkSmartAttributeParsedData *a) {
         else if (!strcmp(a->name, "temperature-centi-celsius"))
                 a->pretty_value = (fourtyeight & 0xFFFF)*100 + 273150;
         else if (!strcmp(a->name, "power-on-minutes"))
-                a->pretty_value = (((uint64_t) a->raw[0]) | (uint64_t) a->raw[1]) * 60 * 1000;
+                a->pretty_value = fourtyeight * 60 * 1000;
         else if (!strcmp(a->name, "power-on-seconds"))
                 a->pretty_value = fourtyeight * 1000;
         else if (!strcmp(a->name, "power-on-half-minutes"))
@@ -1363,7 +1363,7 @@ static const SkSmartQuirkDatabase quirk_database[] = { {
                 "FUJITSU MHY2250BH"
                 ")$",
                 "^0085000B$", /* seems to be specific to this firmware */
-                SK_SMART_QUIRK_9_UNKNOWN|
+                SK_SMART_QUIRK_9_POWERONMINUTES|
                 SK_SMART_QUIRK_197_UNKNOWN|
                 SK_SMART_QUIRK_198_UNKNOWN
         }, {
