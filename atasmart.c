@@ -2304,9 +2304,10 @@ int sk_disk_dump(SkDisk *d) {
                 uint64_t value, power_on;
 
                 ret = sk_disk_smart_status(d, &good);
-                printf("SMART Disk Health Good: %s\n",
-                       ret >= 0 ? yes_no(good) : strerror(errno));
-
+                printf("%sSMART Disk Health Good: %s%s\n",
+                       ret >= 0 && !good ? HIGHLIGHT : "",
+                       ret >= 0 ? yes_no(good) : strerror(errno),
+                       ret >= 0 && !good ? ENDHIGHLIGHT : "");
                 if ((ret = sk_disk_smart_read_data(d)) < 0)
                         return ret;
 
