@@ -115,7 +115,7 @@ struct SkDisk {
         SkBool blob_smart_status:1;
         SkBool blob_smart_status_valid:1;
 
-        SkBool attribute_verification_failed:1;
+        SkBool attribute_verification_bad:1;
 
         SkIdentifyParsedData identify_parsed_data;
         SkSmartParsedData smart_parsed_data;
@@ -1213,7 +1213,7 @@ static void verify_temperature(SkDisk *d, SkSmartAttributeParsedData *a) {
         if (a->pretty_value < SK_MKELVIN_VALID_MIN ||
             a->pretty_value > SK_MKELVIN_VALID_MAX) {
                 a->pretty_unit = SK_SMART_ATTRIBUTE_UNIT_UNKNOWN;
-                d->attribute_verification_failed = TRUE;
+                d->attribute_verification_bad = TRUE;
         }
 }
 
@@ -1224,7 +1224,7 @@ static void verify_short_time(SkDisk *d, SkSmartAttributeParsedData *a) {
         if (a->pretty_value < SK_MSECOND_VALID_MIN ||
             a->pretty_value > SK_MSECOND_VALID_SHORT_MAX) {
                 a->pretty_unit = SK_SMART_ATTRIBUTE_UNIT_UNKNOWN;
-                d->attribute_verification_failed = TRUE;
+                d->attribute_verification_bad = TRUE;
         }
 }
 
@@ -1235,7 +1235,7 @@ static void verify_long_time(SkDisk *d, SkSmartAttributeParsedData *a) {
         if (a->pretty_value < SK_MSECOND_VALID_MIN ||
             a->pretty_value > SK_MSECOND_VALID_LONG_MAX) {
                 a->pretty_unit = SK_SMART_ATTRIBUTE_UNIT_UNKNOWN;
-                d->attribute_verification_failed = TRUE;
+                d->attribute_verification_bad = TRUE;
         }
 }
 
@@ -1250,7 +1250,7 @@ static void verify_sectors(SkDisk *d, SkSmartAttributeParsedData *a) {
 
         if (max_sectors > 0 && a->pretty_value > max_sectors) {
                 a->pretty_value = SK_SMART_ATTRIBUTE_UNIT_UNKNOWN;
-                d->attribute_verification_failed = TRUE;
+                d->attribute_verification_bad = TRUE;
         } else {
                 if ((!strcmp(a->name, "reallocated-sector-count") ||
                      !strcmp(a->name, "current-pending-sector")) &&
@@ -2306,7 +2306,7 @@ int sk_disk_dump(SkDisk *d) {
                         printf("Temperature: %s\n", print_value(pretty, sizeof(pretty), value, SK_SMART_ATTRIBUTE_UNIT_MKELVIN));
 
                 printf("Attribute Parsing Verification: %s\n",
-                       d->attribute_verification_failed ? "Bad" : "Good");
+                       d->attribute_verification_bad ? "Bad" : "Good");
 
                 if (sk_disk_smart_get_overall(d, &overall) < 0)
                         printf("Overall Status: %s\n", strerror(errno));
