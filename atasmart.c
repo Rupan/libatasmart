@@ -1183,7 +1183,8 @@ static void make_pretty(SkSmartAttributeParsedData *a) {
                 a->pretty_value = (fourtyeight & 0xFFFF)*100 + 273150;
         else if (!strcmp(a->name, "power-on-minutes"))
                 a->pretty_value = fourtyeight * 60 * 1000;
-        else if (!strcmp(a->name, "power-on-seconds"))
+        else if (!strcmp(a->name, "power-on-seconds") ||
+                 !strcmp(a->name, "power-on-seconds-2"))
                 a->pretty_value = fourtyeight * 1000;
         else if (!strcmp(a->name, "power-on-half-minutes"))
                 a->pretty_value = fourtyeight * 30 * 1000;
@@ -1309,6 +1310,13 @@ static const SkSmartAttributeInfo const attribute_info[256] = {
         [228] = { "power-off-retract-count-2",   SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
         [230] = { "head-amplitude",              SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
         [231] = { "temperature-celsius",         SK_SMART_ATTRIBUTE_UNIT_MKELVIN,  verify_temperature },
+
+        /* http://www.adtron.com/pdf/SMART_for_XceedLite_SATA_RevA.pdf */
+        [232] = { "endurance-remaining",         SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
+        [233] = { "power-on-seconds-2",          SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
+        [234] = { "uncorrectable-ecc-count",     SK_SMART_ATTRIBUTE_UNIT_SECTORS,  NULL },
+        [235] = { "good-block-rate",             SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
+
         [240] = { "head-flying-hours",           SK_SMART_ATTRIBUTE_UNIT_MSECONDS, verify_long_time },
         [250] = { "read-error-retry-rate",       SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL }
 };
@@ -1911,6 +1919,7 @@ static void power_on_cb(SkDisk *d, const SkSmartAttributeParsedData *a, struct a
 
         if (!strcmp(a->name, "power-on-minutes") ||
             !strcmp(a->name, "power-on-seconds") ||
+            !strcmp(a->name, "power-on-seconds-2") ||
             !strcmp(a->name, "power-on-half-minutes") ||
             !strcmp(a->name, "power-on-hours")) {
 
