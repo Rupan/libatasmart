@@ -16,11 +16,12 @@
 # License along with libatasmart. If not, If not, see
 # <http://www.gnu.org/licenses/>.
 
+dist_doc_DATA = README
+
 EXTRA_DIST = \
 	bootstrap.sh \
 	LGPL \
 	README \
-	atasmart.vapi \
 	atasmart.c \
 	blob-examples/README \
 	blob-examples/FUJITSU_MHY2120BH--0084000D \
@@ -36,7 +37,8 @@ EXTRA_DIST = \
 	blob-examples/TOSHIBA_MK1651GSY--38IGT0G5T \
 	blob-examples/WDC_WD2500JB--00REA0-20.00K20 \
 	blob-examples/WDC_WD2500JS-75NCB3--10.02E04 \
-	blob-examples/WDC_WD5000AAKS--00TMA0-12.01C01
+	blob-examples/WDC_WD5000AAKS--00TMA0-12.01C01 \
+	vala/atasmart.vapi
 
 SUBDIRS =
 
@@ -47,6 +49,9 @@ noinst_DATA =
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libatasmart.pc
+
+vapidir = $(datadir)/vala/vapi
+vapi_DATA = vala/atasmart.vapi
 
 include_HEADERS = \
 	atasmart.h
