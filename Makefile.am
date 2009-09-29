@@ -32,6 +32,7 @@ EXTRA_DIST = \
 	blob-examples/Maxtor_96147H8--BAC51KJ0 \
 	blob-examples/Maxtor_96147H8--BAC51KJ0--2 \
 	blob-examples/SAMSUNG_HD501LJ--CR100-12 \
+	blob-examples/SAMSUNG_MMCQE28G8MUP--0VA_VAM08L1Q \
 	blob-examples/ST320410A--3.39 \
 	blob-examples/ST9160821AS--3.CLH \
 	blob-examples/TOSHIBA_MK1651GSY--38IGT0G5T \
