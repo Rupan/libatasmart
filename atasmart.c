@@ -2474,21 +2474,30 @@ static int disk_find_type(SkDisk *d, dev_t devnum) {
                         goto finish;
                 }
 
-                if ((vid == 0x152d && pid == 0x2329)) {
+                if ((vid == 0x152d && pid == 0x2329) ||
+                    (vid == 0x152d && pid == 0x2338) ||
+                    (vid == 0x152d && pid == 0x2339))
                         /* Some JMicron bridges seem to choke on SMART
                          * commands, so let's explicitly black list
                          * them here.
                          *
-                         * https://bugzilla.redhat.com/show_bug.cgi?id=515881 */
+                         * https://bugzilla.redhat.com/show_bug.cgi?id=515881
+                         *
+                         * At least some of the JMicron bridges with
+                         * these vids/pids choke on the jmicron access
+                         * mode. To make sure we don't break things
+                         * for people we now disable this by
+                         * default.*/
                         d->type = SK_DISK_TYPE_NONE;
-                } else if ((vid == 0x0c0b && pid == 0xb159) ||
+                else if ((vid == 0x152d && pid == 0x2336))
+                        /* This JMicron bridge seems to always work
+                         * with SMART commands send with the jmicron
+                         * access mode. */
+                        d->type = SK_DISK_TYPE_JMICRON;
+                else if ((vid == 0x0c0b && pid == 0xb159) ||
                     (vid == 0x04fc && pid == 0x0c25) ||
                     (vid == 0x04fc && pid == 0x0c15))
                         d->type = SK_DISK_TYPE_SUNPLUS;
-                else if ((vid == 0x152d && pid == 0x2336) ||
-                    (vid == 0x152d && pid == 0x2338) ||
-                    (vid == 0x152d && pid == 0x2339))
-                        d->type = SK_DISK_TYPE_JMICRON;
                 else
                         d->type = SK_DISK_TYPE_ATA_PASSTHROUGH_12;
 
