@@ -31,6 +31,7 @@ EXTRA_DIST = \
 	blob-examples/INTEL_SSDSA2MH080G1GC--045C8820 \
 	blob-examples/Maxtor_96147H8--BAC51KJ0 \
 	blob-examples/Maxtor_96147H8--BAC51KJ0--2 \
+	blob-examples/MCCOE64GEMPP--2.9.09 \
 	blob-examples/SAMSUNG_HD501LJ--CR100-12 \
 	blob-examples/SAMSUNG_MMCQE28G8MUP--0VA_VAM08L1Q \
 	blob-examples/ST320410A--3.39 \
