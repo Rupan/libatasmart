@@ -1349,6 +1349,7 @@ typedef enum SkSmartQuirk {
         SK_SMART_QUIRK_9_UNKNOWN                   = 0x0400,
         SK_SMART_QUIRK_197_UNKNOWN                 = 0x0800,
         SK_SMART_QUIRK_198_UNKNOWN                 = 0x1000,
+        SK_SMART_QUIRK_190_UNKNOWN                 = 0x2000
 } SkSmartQuirk;
 
 /* %STRINGPOOLSTART% */
@@ -1366,6 +1367,7 @@ static const char *quirk_name[] = {
         "9_UNKNOWN",
         "197_UNKNOWN",
         "198_UNKNOWN",
+        "190_UNKNOWN",
         NULL
 };
 /* %STRINGPOOLSTOP% */
@@ -1510,6 +1512,13 @@ static const SkSmartQuirkDatabase quirk_database[] = { {
                 "^MBZOC60P$",
                 SK_SMART_QUIRK_5_UNKNOWN
         }, {
+
+        /*** Apple SSD (?) http://bugs.freedesktop.org/show_bug.cgi?id=24700 */
+                "^MCCOE64GEMPP$",
+                "^2.9.09$",
+                SK_SMART_QUIRK_5_UNKNOWN|
+                SK_SMART_QUIRK_190_UNKNOWN
+        }, {
                 NULL,
                 NULL,
                 0
@@ -1620,6 +1629,12 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
                                 } else if (quirk & SK_SMART_QUIRK_9_UNKNOWN)
                                         return NULL;
                                 /* %STRINGPOOLSTOP% */
+
+                                break;
+
+                        case 190:
+                                if (quirk & SK_SMART_QUIRK_190_UNKNOWN)
+                                        return NULL;
 
                                 break;
 
