@@ -2679,7 +2679,7 @@ int sk_disk_get_blob(SkDisk *d, const void **blob, size_t *rsize) {
         size =
                 (d->identify_valid ? 8 + sizeof(d->identify) : 0) +
                 (d->smart_data_valid ? 8 + sizeof(d->smart_data) : 0) +
-                (d->smart_thresholds ? 8 + sizeof(d->smart_thresholds) : 0);
+                (d->smart_thresholds_valid ? 8 + sizeof(d->smart_thresholds) : 0);
 
         if (sk_disk_smart_status(d, &good) >= 0) {
                 size += 12;
