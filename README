@@ -49,3 +49,6 @@ AUTHOR:
 
 REQUIREMENTS:
         None (except Linux with a GLibc)
+
+BUGS:
+        http://bugs.freedesktop.org/buglist.cgi?bug_status=__open__&product=libatasmart
