@@ -108,6 +108,8 @@ struct SkDisk {
         uint8_t smart_data[512];
         uint8_t smart_thresholds[512];
 
+        SkBool smart_initialized:1;
+
         SkBool identify_valid:1;
         SkBool smart_data_valid:1;
         SkBool smart_thresholds_valid:1;
@@ -148,6 +150,8 @@ typedef enum SkSmartCommand {
 #define SK_MSECOND_VALID_MIN 1ULL
 #define SK_MSECOND_VALID_SHORT_MAX (60ULL * 60ULL * 1000ULL)
 #define SK_MSECOND_VALID_LONG_MAX (30ULL * 365ULL * 24ULL * 60ULL * 60ULL * 1000ULL)
+
+int init_smart(SkDisk *d);
 
 static const char *disk_type_to_human_string(SkDiskType type) {
 
@@ -818,6 +822,9 @@ int sk_disk_smart_read_data(SkDisk *d) {
         int ret;
         size_t len = 512;
 
+        if (init_smart(d) < 0)
+                return -1;
+
         if (!disk_smart_is_available(d)) {
                 errno = ENOTSUP;
                 return -1;
@@ -875,6 +882,9 @@ int sk_disk_smart_status(SkDisk *d, SkBool *good) {
         uint16_t cmd[6];
         int ret;
 
+        if (init_smart(d) < 0)
+                return -1;
+
         if (!disk_smart_is_available(d)) {
                 errno = ENOTSUP;
                 return -1;
@@ -920,6 +930,9 @@ int sk_disk_smart_status(SkDisk *d, SkBool *good) {
 int sk_disk_smart_self_test(SkDisk *d, SkSmartSelfTest test) {
         uint16_t cmd[6];
         int ret;
+
+        if (init_smart(d) < 0)
+                return -1;
 
         if (!disk_smart_is_available(d)) {
                 errno = ENOTSUP;
@@ -2520,6 +2533,41 @@ finish:
         return r;
 }
 
+int init_smart(SkDisk *d) {
+        /* We don't do the SMART initialization right-away, since some
+         * drivers spin up when we do that */
+
+        int ret;
+
+        if (d->smart_initialized)
+                return 0;
+
+        d->smart_initialized = TRUE;
+
+        /* Check if driver can do SMART, and enable if necessary */
+        if (!disk_smart_is_available(d))
+                return 0;
+
+        if (!disk_smart_is_enabled(d)) {
+                if ((ret = disk_smart_enable(d, TRUE)) < 0)
+                        goto fail;
+
+                if ((ret = disk_identify_device(d)) < 0)
+                        goto fail;
+
+                if (!disk_smart_is_enabled(d)) {
+                        errno = EIO;
+                        ret = -1;
+                        goto fail;
+                }
+        }
+
+        disk_smart_read_thresholds(d);
+
+fail:
+        return ret;
+}
+
 int sk_disk_open(const char *name, SkDisk **_d) {
         SkDisk *d;
         int ret = -1;
@@ -2594,26 +2642,6 @@ int sk_disk_open(const char *name, SkDisk **_d) {
                                 d->type = SK_DISK_TYPE_NONE;
                 } else
                         disk_identify_device(d);
-
-                /* Check if driver can do SMART, and enable if necessary */
-                if (disk_smart_is_available(d)) {
-
-                        if (!disk_smart_is_enabled(d)) {
-                                if ((ret = disk_smart_enable(d, TRUE)) < 0)
-                                        goto fail;
-
-                                if ((ret = disk_identify_device(d)) < 0)
-                                        goto fail;
-
-                                if (!disk_smart_is_enabled(d)) {
-                                        errno = EIO;
-                                        ret = -1;
-                                        goto fail;
-                                }
-                        }
-
-                        disk_smart_read_thresholds(d);
-                }
         }
 
         *_d = d;
