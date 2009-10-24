@@ -37,6 +37,7 @@ EXTRA_DIST = \
 	blob-examples/SAMSUNG_MP0804H--UE100-14 \
 	blob-examples/ST320410A--3.39 \
 	blob-examples/ST9160821AS--3.CLH \
+	blob-examples/ST9100821AS--3.CME \
 	blob-examples/TOSHIBA_MK1651GSY--38IGT0G5T \
 	blob-examples/WDC_WD2500JB--00REA0-20.00K20 \
 	blob-examples/WDC_WD2500JS-75NCB3--10.02E04 \
