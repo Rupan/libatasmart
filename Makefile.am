@@ -83,7 +83,8 @@ sktest_LDADD = \
 libatasmart_la_SOURCES = \
 	atasmart.strpool.c atasmart.h
 libatasmart_la_LDFLAGS = \
-	-version-info $(LIBATASMART_VERSION_INFO)
+	-version-info $(LIBATASMART_VERSION_INFO) \
+	-export-symbols-regex '(^sk_.*)'
 libatasmart_la_LIBADD = \
 	$(LIBUDEV_LIBS)
 libatasmart_la_CFLAGS = \
