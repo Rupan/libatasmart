@@ -1513,9 +1513,10 @@ static const SkSmartQuirkDatabase quirk_database[] = { {
                 SK_SMART_QUIRK_5_UNKNOWN
         }, {
 
-        /*** Apple SSD (?) http://bugs.freedesktop.org/show_bug.cgi?id=24700 */
+        /*** Apple SSD (?) http://bugs.freedesktop.org/show_bug.cgi?id=24700
+	                   https://bugs.launchpad.net/ubuntu/+source/gnome-disk-utility/+bug/438136/comments/4 */
                 "^MCCOE64GEMPP$",
-                "^2.9.09$",
+                "^2.9.0[3-9]$",
                 SK_SMART_QUIRK_5_UNKNOWN|
                 SK_SMART_QUIRK_190_UNKNOWN
         }, {
