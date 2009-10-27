@@ -26,7 +26,7 @@ EXTRA_DIST = \
 	blob-examples/README \
 	blob-examples/FUJITSU_MHY2120BH--0084000D \
 	blob-examples/FUJITSU_MHY2120BH--0085000B \
-	blob-examples/FUJITSU_MHY2120BH--0085000B \
+	blob-examples/FUJITSU_MHY2250BH--0085000B \
 	blob-examples/FUJITSU_MHZ2160BH_G1--0084000A \
 	blob-examples/INTEL_SSDSA2MH080G1GC--045C8820 \
 	blob-examples/Maxtor_96147H8--BAC51KJ0 \
