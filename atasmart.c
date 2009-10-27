@@ -151,7 +151,7 @@ typedef enum SkSmartCommand {
 #define SK_MSECOND_VALID_SHORT_MAX (60ULL * 60ULL * 1000ULL)
 #define SK_MSECOND_VALID_LONG_MAX (30ULL * 365ULL * 24ULL * 60ULL * 60ULL * 1000ULL)
 
-int init_smart(SkDisk *d);
+static int init_smart(SkDisk *d);
 
 static const char *disk_type_to_human_string(SkDiskType type) {
 
@@ -2549,7 +2549,7 @@ finish:
         return r;
 }
 
-int init_smart(SkDisk *d) {
+static int init_smart(SkDisk *d) {
         /* We don't do the SMART initialization right-away, since some
          * drivers spin up when we do that */
 
