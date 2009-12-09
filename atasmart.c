@@ -2579,6 +2579,7 @@ static int init_smart(SkDisk *d) {
         }
 
         disk_smart_read_thresholds(d);
+        ret = 0;
 
 fail:
         return ret;
