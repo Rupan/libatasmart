@@ -2503,9 +2503,16 @@ static int disk_find_type(SkDisk *d, dev_t devnum) {
                         goto finish;
                 }
 
-                if ((vid == 0x152d && pid == 0x2329) ||
-                    (vid == 0x152d && pid == 0x2338) ||
-                    (vid == 0x152d && pid == 0x2339))
+                if ((vid == 0x0928 && pid == 0x0000))
+                        /* This Oxford Semiconductor bridge seems to
+                         * choke on SAT commands. Let's explicitly
+                         * black list it here.
+                         *
+                         * http://bugs.freedesktop.org/show_bug.cgi?id=24951 */
+                        d->type = SK_DISK_TYPE_NONE;
+                else if ((vid == 0x152d && pid == 0x2329) ||
+                         (vid == 0x152d && pid == 0x2338) ||
+                         (vid == 0x152d && pid == 0x2339))
                         /* Some JMicron bridges seem to choke on SMART
                          * commands, so let's explicitly black list
                          * them here.
@@ -2516,7 +2523,7 @@ static int disk_find_type(SkDisk *d, dev_t devnum) {
                          * these vids/pids choke on the jmicron access
                          * mode. To make sure we don't break things
                          * for people we now disable this by
-                         * default.*/
+                         * default. */
                         d->type = SK_DISK_TYPE_NONE;
                 else if ((vid == 0x152d && pid == 0x2336))
                         /* This JMicron bridge seems to always work
