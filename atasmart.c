@@ -122,6 +122,15 @@ struct SkDisk {
         SkIdentifyParsedData identify_parsed_data;
         SkSmartParsedData smart_parsed_data;
 
+        /* cache for commonly used attributes */
+        SkBool attribute_cache_valid:1;
+        SkBool bad_attribute_now:1;
+        SkBool bad_attribute_in_the_past:1;
+        SkBool reallocated_sector_count_found:1;
+        SkBool current_pending_sector_found:1;
+        uint64_t reallocated_sector_count;
+        uint64_t current_pending_sector;
+
         void *blob;
 };
 
@@ -2159,64 +2168,61 @@ int sk_disk_smart_get_power_cycle(SkDisk *d, uint64_t *count) {
         return 0;
 }
 
-static void reallocated_cb(SkDisk *d, const SkSmartAttributeParsedData *a, struct attr_helper *ah) {
+static void fill_cache_cb(SkDisk *d, const SkSmartAttributeParsedData *a, void* userdata) {
+
+        if (a->prefailure) {
+                if (a->good_now_valid && !a->good_now)
+                    d->bad_attribute_now = TRUE;
+
+                if (a->good_in_the_past_valid && !a->good_in_the_past)
+                    d->bad_attribute_in_the_past = TRUE;
+        }
 
         if (a->pretty_unit != SK_SMART_ATTRIBUTE_UNIT_SECTORS)
                 return;
 
         if (!strcmp(a->name, "reallocated-sector-count")) {
+                if (a->pretty_value > d->reallocated_sector_count)
+                        d->reallocated_sector_count = a->pretty_value;
+                d->reallocated_sector_count_found = TRUE;
+        }
 
-                if (!ah->found || a->pretty_value > *ah->value)
-                        *ah->value = a->pretty_value;
-
-                ah->found = TRUE;
+        if (!strcmp(a->name, "current-pending-sector")) {
+                if (a->pretty_value > d->current_pending_sector)
+                        d->current_pending_sector = a->pretty_value;
+                d->current_pending_sector_found = TRUE;
         }
 }
 
-static void pending_cb(SkDisk *d, const SkSmartAttributeParsedData *a, struct attr_helper *ah) {
+static int fill_cache(SkDisk *d) {
+        if (d->attribute_cache_valid)
+                return 0;
 
-        if (a->pretty_unit != SK_SMART_ATTRIBUTE_UNIT_SECTORS)
-                return;
-
-        if (!strcmp(a->name, "current-pending-sector")) {
-
-                if (!ah->found || a->pretty_value > *ah->value)
-                        *ah->value = a->pretty_value;
-
-                ah->found = TRUE;
-        }
+        if (sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) fill_cache_cb, NULL) >= 0) {
+                d->attribute_cache_valid = TRUE;
+                return 0;
+        } else
+                return -1;
 }
 
 int sk_disk_smart_get_bad(SkDisk *d, uint64_t *sectors) {
-        struct attr_helper ah1, ah2;
-        uint64_t sectors1, sectors2;
-
         assert(d);
         assert(sectors);
 
-        ah1.found = FALSE;
-        ah1.value = &sectors1;
-
-        if (sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) reallocated_cb, &ah1) < 0)
+        if (fill_cache (d) < 0)
                 return -1;
 
-        ah2.found = FALSE;
-        ah2.value = &sectors2;
-
-        if (sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) pending_cb, &ah2) < 0)
-                return -1;
-
-        if (!ah1.found && !ah2.found) {
+        if (!d->reallocated_sector_count_found && !d->current_pending_sector_found) {
                 errno = ENOENT;
                 return -1;
         }
 
-        if (ah1.found && ah2.found)
-                *sectors = sectors1 + sectors2;
-        else if (ah1.found)
-                *sectors = sectors1;
+        if (d->reallocated_sector_count_found && d->current_pending_sector_found)
+                *sectors = d->reallocated_sector_count + d->current_pending_sector;
+        else if (d->reallocated_sector_count_found)
+                *sectors = d->reallocated_sector_count;
         else
-                *sectors = sectors2;
+                *sectors = d->current_pending_sector;
 
         return 0;
 }
@@ -2238,16 +2244,6 @@ const char* sk_smart_overall_to_string(SkSmartOverall overall) {
                 return NULL;
 
         return _P(map[overall]);
-}
-
-static void bad_attribute_now_cb(SkDisk *d, const SkSmartAttributeParsedData *a, SkBool *good) {
-        if (a->prefailure && a->good_now_valid && !a->good_now)
-                *good = FALSE;
-}
-
-static void bad_attribute_in_the_past_cb(SkDisk *d, const SkSmartAttributeParsedData *a, SkBool *good) {
-        if (a->prefailure && a->good_in_the_past_valid && !a->good_in_the_past)
-                *good = FALSE;
 }
 
 static uint64_t u64log2(uint64_t n) {
@@ -2300,11 +2296,10 @@ int sk_disk_smart_get_overall(SkDisk *d, SkSmartOverall *overall) {
         }
 
         /* Third, check if any of the SMART attributes is bad */
-        good = TRUE;
-        if (sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) bad_attribute_now_cb, &good) < 0)
+        if (fill_cache (d) < 0)
                 return -1;
 
-        if (!good) {
+        if (d->bad_attribute_now) {
                 *overall = SK_SMART_OVERALL_BAD_ATTRIBUTE_NOW;
                 return 0;
         }
@@ -2316,11 +2311,7 @@ int sk_disk_smart_get_overall(SkDisk *d, SkSmartOverall *overall) {
         }
 
         /* Fifth, check if any of the SMART attributes ever was bad */
-        good = TRUE;
-        if (sk_disk_smart_parse_attributes(d, (SkSmartAttributeParseCallback) bad_attribute_in_the_past_cb, &good) < 0)
-                return -1;
-
-        if (!good) {
+        if (d->bad_attribute_in_the_past) {
                 *overall = SK_SMART_OVERALL_BAD_ATTRIBUTE_IN_THE_PAST;
                 return 0;
         }
