@@ -1,23 +1,23 @@
-# -*- Autoconf -*-
-# Process this file with autoconf to produce a configure script.
+dnl -*- Autoconf -*-
+dnl Process this file with autoconf to produce a configure script.
 
-# This file is part of libatasmart.
-#
-# Copyright 2008 Lennart Poettering
-#
-# libatasmart is free software; you can redistribute it and/or modify
-# it under the terms of the GNU Lesser General Public License as
-# published by the Free Software Foundation, either version 2.1 of the
-# License, or (at your option) any later version.
-#
-# libatasmart is distributed in the hope that it will be useful, but
-# WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-# Lesser General Public License for more details.
-#
-# You should have received a copy of the GNU Lesser General Public
-# License along with libatasmart. If not, If not, see
-# <http://www.gnu.org/licenses/>.
+dnl This file is part of libatasmart.
+dnl
+dnl Copyright 2008 Lennart Poettering
+dnl
+dnl libatasmart is free software; you can redistribute it and/or modify
+dnl it under the terms of the GNU Lesser General Public License as
+dnl published by the Free Software Foundation, either version 2.1 of the
+dnl License, or (at your option) any later version.
+dnl
+dnl libatasmart is distributed in the hope that it will be useful, but
+dnl WITHOUT ANY WARRANTY; without even the implied warranty of
+dnl MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+dnl Lesser General Public License for more details.
+dnl
+dnl You should have received a copy of the GNU Lesser General Public
+dnl License along with libatasmart. If not, If not, see
+dnl <http://www.gnu.org/licenses/>.
 
 AC_PREREQ(2.63)
 
@@ -32,8 +32,6 @@ AC_SUBST(PACKAGE_URL, [http://git.0pointer.de/?p=libatasmart.git])
 
 AC_SUBST(LIBATASMART_VERSION_INFO, [4:3:0])
 
-AC_CANONICAL_HOST
-
 AM_SILENT_RULES([yes])
 
 if type -p stow > /dev/null && test -d /usr/local/stow ; then
@@ -41,61 +39,25 @@ if type -p stow > /dev/null && test -d /usr/local/stow ; then
    ac_default_prefix="/usr/local/stow/${PACKAGE_NAME}-${PACKAGE_VERSION}"
 fi
 
-#### Checks for programs. ####
-
-# CC
-
 AC_PROG_CC
 AC_PROG_CC_C99
 AM_PROG_CC_C_O
 AC_PROG_GCC_TRADITIONAL
 AX_CC_FOR_BUILD
+
 AC_USE_SYSTEM_EXTENSIONS
+AC_SYS_LARGEFILE
 
-# C++
-
-AC_PROG_CXX
+AC_PROG_LIBTOOL
 
 dnl Check compiler flags
 CC_CHECK_CFLAGS_APPEND([-Wall -W -Wextra -pedantic -pipe -Wformat -Wold-style-definition -Wdeclaration-after-statement -Wfloat-equal -Wmissing-declarations -Wmissing-prototypes -Wstrict-prototypes -Wredundant-decls -Wmissing-noreturn -Wshadow -Wendif-labels -Wpointer-arith -Wcast-align -Wwrite-strings -Winline -Wno-unused-parameter -ffast-math])
 
-#### libtool stuff ####
-
-AC_PROG_LIBTOOL
-
-#### Checks for header files. ####
-
-# ISO
-AC_HEADER_STDC
-
-# XPG4-UNIX
-AC_CHECK_HEADERS([sys/poll.h])
-
-# Other
-AC_CHECK_HEADERS([sys/ioctl.h])
-AC_CHECK_HEADERS([byteswap.h])
-
-#### Typdefs, structures, etc. ####
-
-AC_C_CONST
-AC_C_BIGENDIAN
-AC_TYPE_PID_T
-AC_TYPE_SIZE_T
-AC_CHECK_TYPES(ssize_t, , [AC_DEFINE([ssize_t], [signed long],
-    [Define ssize_t if it is not done by the standard libs.])])
-AC_TYPE_OFF_T
-AC_TYPE_SIGNAL
-AC_TYPE_UID_T
-
-#### Large File-Support (LFS) ####
-
-AC_SYS_LARGEFILE
-
 PKG_CHECK_MODULES([LIBUDEV], [libudev >= 143])
 
-###################################
-#            Output               #
-###################################
+dnl###################################
+dnl#            Output               #
+dnl###################################
 
 AC_CONFIG_FILES([
 Makefile
