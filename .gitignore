@@ -1,7 +1,8 @@
 *~
-m4/
+m4/lt*
+m4/libtool.m4
+strpool/strpool
 atasmart.strpool.c
-strpool
 skdump
 sktest
 .deps/

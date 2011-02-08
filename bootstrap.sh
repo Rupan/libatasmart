@@ -54,7 +54,7 @@ else
 
     mkdir -p m4
     "$LIBTOOLIZE" -c --force
-    run_versioned aclocal "$VERSION"
+    run_versioned aclocal "$VERSION" -I m4
     run_versioned autoconf 2.63 -Wall
     run_versioned autoheader 2.63
     run_versioned automake "$VERSION" --copy --foreign --add-missing

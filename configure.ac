@@ -48,6 +48,7 @@ fi
 AC_PROG_CC
 AM_PROG_CC_C_O
 AC_PROG_GCC_TRADITIONAL
+AX_CC_FOR_BUILD
 AC_USE_SYSTEM_EXTENSIONS
 
 # C++
@@ -123,6 +124,7 @@ PKG_CHECK_MODULES([LIBUDEV], [libudev >= 143])
 
 AC_CONFIG_FILES([
 Makefile
+strpool/Makefile
 libatasmart.pc
 ])
 AC_OUTPUT

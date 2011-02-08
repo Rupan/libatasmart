@@ -44,7 +44,8 @@ EXTRA_DIST = \
 	blob-examples/WDC_WD5000AAKS--00TMA0-12.01C01 \
 	vala/atasmart.vapi
 
-SUBDIRS =
+# build the strpool tool first
+SUBDIRS = strpool .
 
 CLEANFILES = atasmart.strpool.c
 
@@ -63,9 +64,6 @@ include_HEADERS = \
 sbin_PROGRAMS = \
 	skdump \
 	sktest
-
-noinst_PROGRAMS = \
-	strpool
 
 lib_LTLIBRARIES = \
 	libatasmart.la
@@ -90,13 +88,13 @@ libatasmart_la_LIBADD = \
 libatasmart_la_CFLAGS = \
 	$(LIBUDEV_CFLAGS)
 
-strpool_SOURCES = \
-	strpool.c
-
 BUILT_SOURCES = \
 	atasmart.strpool.c
 
-atasmart.strpool.c: atasmart.c strpool
-	$(top_builddir)/strpool $< $@
+strpool/strpool:
+	$(MAKE) -C strpool strpool
+
+atasmart.strpool.c: atasmart.c strpool/strpool
+	$(top_builddir)/strpool/strpool $< $@
 
 ACLOCAL_AMFLAGS = -I m4
