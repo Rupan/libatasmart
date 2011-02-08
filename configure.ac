@@ -46,6 +46,7 @@ fi
 # CC
 
 AC_PROG_CC
+AC_PROG_CC_C99
 AM_PROG_CC_C_O
 AC_PROG_GCC_TRADITIONAL
 AX_CC_FOR_BUILD
@@ -55,34 +56,8 @@ AC_USE_SYSTEM_EXTENSIONS
 
 AC_PROG_CXX
 
-# GCC flags
-
-test_gcc_flag() {
-    AC_LANG_CONFTEST([int main(int argc, char*argv[]) {}])
-    $CC -c conftest.c $CFLAGS "$1" -o conftest.o > /dev/null 2> /dev/null
-    ret=$?
-    rm -f conftest.o
-    return $ret
-}
-
-# If using GCC specify some additional parameters
-if test "x$GCC" = "xyes" ; then
-
-    # We use gnu99 instead of c99 because many have interpreted the standard
-    # in a way that int64_t isn't defined on non-64 bit platforms.
-    DESIRED_FLAGS="-std=gnu99 -Wall -W -Wextra -pedantic -pipe -Wformat -Wold-style-definition -Wdeclaration-after-statement -Wfloat-equal -Wmissing-declarations -Wmissing-prototypes -Wstrict-prototypes -Wredundant-decls -Wmissing-noreturn -Wshadow -Wendif-labels -Wpointer-arith -Wcast-align -Wwrite-strings -Winline -Wno-unused-parameter -ffast-math"
-
-    for flag in $DESIRED_FLAGS ; do
-        AC_MSG_CHECKING([whether $CC accepts $flag])
-        if test_gcc_flag $flag ; then
-           CFLAGS="$CFLAGS $flag"
-           CXXFLAGS="$CXXFLAGS $flag"
-           AC_MSG_RESULT([yes])
-        else
-           AC_MSG_RESULT([no])
-        fi
-    done
-fi
+dnl Check compiler flags
+CC_CHECK_CFLAGS_APPEND([-Wall -W -Wextra -pedantic -pipe -Wformat -Wold-style-definition -Wdeclaration-after-statement -Wfloat-equal -Wmissing-declarations -Wmissing-prototypes -Wstrict-prototypes -Wredundant-decls -Wmissing-noreturn -Wshadow -Wendif-labels -Wpointer-arith -Wcast-align -Wwrite-strings -Winline -Wno-unused-parameter -ffast-math])
 
 #### libtool stuff ####
 
