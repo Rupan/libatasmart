@@ -435,6 +435,7 @@ static int parse(FILE *in, const char *fname, struct item **rfirst, char **remai
                                                         rl = 0;
 
                                                         i->next = NULL;
+                                                        i->suffix_of = NULL;
 
                                                         if (last)
                                                                 last->next = i;
