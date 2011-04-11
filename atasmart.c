@@ -1296,6 +1296,7 @@ static const SkSmartAttributeInfo const attribute_info[256] = {
         [11]  = { "calibration-retry-count",     SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
         [12]  = { "power-cycle-count",           SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
         [13]  = { "read-soft-error-rate",        SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
+        [170] = { "available-reserved-space",    SK_SMART_ATTRIBUTE_UNIT_PERCENT,  NULL },
         [184] = { "end-to-end-error",            SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
         [187] = { "reported-uncorrect",          SK_SMART_ATTRIBUTE_UNIT_SECTORS,  verify_sectors },
         [188] = { "command-timeout",             SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
