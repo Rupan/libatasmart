@@ -1208,7 +1208,8 @@ static void make_pretty(SkSmartAttributeParsedData *a) {
         else if (!strcmp(a->name, "reallocated-sector-count") ||
                  !strcmp(a->name, "current-pending-sector"))
                 a->pretty_value = fourtyeight & 0xFFFFFFFFU;
-        else if (!strcmp(a->name, "endurance-remaining"))
+        else if (!strcmp(a->name, "endurance-remaining") ||
+                 !strcmp(a->name, "available-reserved-space"))
                 a->pretty_value = a->current_value;
         else
                 a->pretty_value = fourtyeight;
@@ -1353,7 +1354,8 @@ typedef enum SkSmartQuirk {
         SK_SMART_QUIRK_9_UNKNOWN                   = 0x0400,
         SK_SMART_QUIRK_197_UNKNOWN                 = 0x0800,
         SK_SMART_QUIRK_198_UNKNOWN                 = 0x1000,
-        SK_SMART_QUIRK_190_UNKNOWN                 = 0x2000
+        SK_SMART_QUIRK_190_UNKNOWN                 = 0x2000,
+        SK_SMART_QUIRK_232_AVAILABLERESERVEDSPACE  = 0x4000
 } SkSmartQuirk;
 
 /* %STRINGPOOLSTART% */
@@ -1372,6 +1374,7 @@ static const char *quirk_name[] = {
         "197_UNKNOWN",
         "198_UNKNOWN",
         "190_UNKNOWN",
+        "232_AVAILABLERESERVEDSPACE",
         NULL
 };
 /* %STRINGPOOLSTOP% */
@@ -1523,6 +1526,12 @@ static const SkSmartQuirkDatabase quirk_database[] = { {
                 "^2.9.0[3-9]$",
                 SK_SMART_QUIRK_5_UNKNOWN|
                 SK_SMART_QUIRK_190_UNKNOWN
+        }, {
+
+        /*** Intel */
+                "^INTEL SSDSA2CW[0-9]{3}G3$",
+                NULL,
+                SK_SMART_QUIRK_232_AVAILABLERESERVEDSPACE
         }, {
                 NULL,
                 NULL,
@@ -1702,6 +1711,17 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
                                 }
                                 /* %STRINGPOOLSTOP% */
 
+                                break;
+
+                        case 232:
+                                /* %STRINGPOOLSTART% */
+                                if (quirk & SK_SMART_QUIRK_232_AVAILABLERESERVEDSPACE) {
+                                        static const SkSmartAttributeInfo a = {
+                                                "available-reserved-space", SK_SMART_ATTRIBUTE_UNIT_PERCENT, NULL
+                                        };
+                                        return &a;
+                                }
+                                /* %STRINGPOOLSTOP% */
                                 break;
                 }
         }
