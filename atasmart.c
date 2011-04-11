@@ -1211,6 +1211,9 @@ static void make_pretty(SkSmartAttributeParsedData *a) {
         else if (!strcmp(a->name, "endurance-remaining") ||
                  !strcmp(a->name, "available-reserved-space"))
                 a->pretty_value = a->current_value;
+        else if (!strcmp(a->name, "total-lbas-written") ||
+                 !strcmp(a->name, "total-lbas-read"))
+                a->pretty_value = fourtyeight * 65535 * 512 / 1000000000;
         else
                 a->pretty_value = fourtyeight;
 }
@@ -1336,6 +1339,8 @@ static const SkSmartAttributeInfo const attribute_info[256] = {
         [235] = { "good-block-rate",             SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
 
         [240] = { "head-flying-hours",           SK_SMART_ATTRIBUTE_UNIT_MSECONDS, verify_long_time },
+        [241] = { "total-lbas-written",          SK_SMART_ATTRIBUTE_UNIT_GB,  NULL },
+        [242] = { "total-lbas-read",             SK_SMART_ATTRIBUTE_UNIT_GB,  NULL },
         [250] = { "read-error-retry-rate",       SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL }
 };
 /* %STRINGPOOLSTOP% */
@@ -1928,7 +1933,8 @@ const char* sk_smart_attribute_unit_to_string(SkSmartAttributeUnit unit) {
                 [SK_SMART_ATTRIBUTE_UNIT_MSECONDS] = "ms",
                 [SK_SMART_ATTRIBUTE_UNIT_SECTORS] = "sectors",
                 [SK_SMART_ATTRIBUTE_UNIT_MKELVIN] = "mK",
-                [SK_SMART_ATTRIBUTE_UNIT_PERCENT] = "%"
+                [SK_SMART_ATTRIBUTE_UNIT_PERCENT] = "%",
+                [SK_SMART_ATTRIBUTE_UNIT_GB] = "GB"
         };
         /* %STRINGPOOLSTOP% */
 
@@ -2267,6 +2273,10 @@ static char *print_value(char *s, size_t len, uint64_t pretty_value, SkSmartAttr
 
                 case SK_SMART_ATTRIBUTE_UNIT_PERCENT:
                         snprintf(s, len, "%llu%%", (unsigned long long) pretty_value);
+                        break;
+
+                case SK_SMART_ATTRIBUTE_UNIT_GB:
+                        snprintf(s, len, "%llu GB", (unsigned long long) pretty_value);
                         break;
 
                 case SK_SMART_ATTRIBUTE_UNIT_NONE:
