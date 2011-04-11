@@ -1346,22 +1346,23 @@ static const SkSmartAttributeInfo const attribute_info[256] = {
 /* %STRINGPOOLSTOP% */
 
 typedef enum SkSmartQuirk {
-        SK_SMART_QUIRK_9_POWERONMINUTES            = 0x0001,
-        SK_SMART_QUIRK_9_POWERONSECONDS            = 0x0002,
-        SK_SMART_QUIRK_9_POWERONHALFMINUTES        = 0x0004,
-        SK_SMART_QUIRK_192_EMERGENCYRETRACTCYCLECT = 0x0008,
-        SK_SMART_QUIRK_193_LOADUNLOAD              = 0x0010,
-        SK_SMART_QUIRK_194_10XCELSIUS              = 0x0020,
-        SK_SMART_QUIRK_194_UNKNOWN                 = 0x0040,
-        SK_SMART_QUIRK_200_WRITEERRORCOUNT         = 0x0080,
-        SK_SMART_QUIRK_201_DETECTEDTACOUNT         = 0x0100,
-        SK_SMART_QUIRK_5_UNKNOWN                   = 0x0200,
-        SK_SMART_QUIRK_9_UNKNOWN                   = 0x0400,
-        SK_SMART_QUIRK_197_UNKNOWN                 = 0x0800,
-        SK_SMART_QUIRK_198_UNKNOWN                 = 0x1000,
-        SK_SMART_QUIRK_190_UNKNOWN                 = 0x2000,
-        SK_SMART_QUIRK_232_AVAILABLERESERVEDSPACE  = 0x4000,
-        SK_SMART_QUIRK_233_MEDIAWEAROUTINDICATOR   = 0x8000
+        SK_SMART_QUIRK_9_POWERONMINUTES            = 0x00001,
+        SK_SMART_QUIRK_9_POWERONSECONDS            = 0x00002,
+        SK_SMART_QUIRK_9_POWERONHALFMINUTES        = 0x00004,
+        SK_SMART_QUIRK_192_EMERGENCYRETRACTCYCLECT = 0x00008,
+        SK_SMART_QUIRK_193_LOADUNLOAD              = 0x00010,
+        SK_SMART_QUIRK_194_10XCELSIUS              = 0x00020,
+        SK_SMART_QUIRK_194_UNKNOWN                 = 0x00040,
+        SK_SMART_QUIRK_200_WRITEERRORCOUNT         = 0x00080,
+        SK_SMART_QUIRK_201_DETECTEDTACOUNT         = 0x00100,
+        SK_SMART_QUIRK_5_UNKNOWN                   = 0x00200,
+        SK_SMART_QUIRK_9_UNKNOWN                   = 0x00400,
+        SK_SMART_QUIRK_197_UNKNOWN                 = 0x00800,
+        SK_SMART_QUIRK_198_UNKNOWN                 = 0x01000,
+        SK_SMART_QUIRK_190_UNKNOWN                 = 0x02000,
+        SK_SMART_QUIRK_232_AVAILABLERESERVEDSPACE  = 0x04000,
+        SK_SMART_QUIRK_233_MEDIAWEAROUTINDICATOR   = 0x08000,
+        SK_SMART_QUIRK_225_TOTALLBASWRITTEN        = 0x10000
 } SkSmartQuirk;
 
 /* %STRINGPOOLSTART% */
@@ -1537,6 +1538,7 @@ static const SkSmartQuirkDatabase quirk_database[] = { {
         /*** Intel */
                 "^INTEL SSDSA2CW[0-9]{3}G3$",
                 NULL,
+                SK_SMART_QUIRK_225_TOTALLBASWRITTEN|
                 SK_SMART_QUIRK_232_AVAILABLERESERVEDSPACE|
                 SK_SMART_QUIRK_233_MEDIAWEAROUTINDICATOR
         }, {
@@ -1713,6 +1715,18 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
                                 if (quirk & SK_SMART_QUIRK_201_DETECTEDTACOUNT) {
                                         static const SkSmartAttributeInfo a = {
                                                 "detected-ta-count", SK_SMART_ATTRIBUTE_UNIT_NONE, NULL
+                                        };
+                                        return &a;
+                                }
+                                /* %STRINGPOOLSTOP% */
+
+                                break;
+
+                        case 225:
+                                /* %STRINGPOOLSTART% */
+                                if (quirk & SK_SMART_QUIRK_225_TOTALLBASWRITTEN) {
+                                        static const SkSmartAttributeInfo a = {
+                                                "total-lbas-written", SK_SMART_ATTRIBUTE_UNIT_GB, NULL
                                         };
                                         return &a;
                                 }
