@@ -1355,7 +1355,8 @@ typedef enum SkSmartQuirk {
         SK_SMART_QUIRK_197_UNKNOWN                 = 0x0800,
         SK_SMART_QUIRK_198_UNKNOWN                 = 0x1000,
         SK_SMART_QUIRK_190_UNKNOWN                 = 0x2000,
-        SK_SMART_QUIRK_232_AVAILABLERESERVEDSPACE  = 0x4000
+        SK_SMART_QUIRK_232_AVAILABLERESERVEDSPACE  = 0x4000,
+        SK_SMART_QUIRK_233_MEDIAWEAROUTINDICATOR   = 0x8000
 } SkSmartQuirk;
 
 /* %STRINGPOOLSTART% */
@@ -1531,7 +1532,8 @@ static const SkSmartQuirkDatabase quirk_database[] = { {
         /*** Intel */
                 "^INTEL SSDSA2CW[0-9]{3}G3$",
                 NULL,
-                SK_SMART_QUIRK_232_AVAILABLERESERVEDSPACE
+                SK_SMART_QUIRK_232_AVAILABLERESERVEDSPACE|
+                SK_SMART_QUIRK_233_MEDIAWEAROUTINDICATOR
         }, {
                 NULL,
                 NULL,
@@ -1723,6 +1725,18 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
                                 }
                                 /* %STRINGPOOLSTOP% */
                                 break;
+
+                        case 233:
+                                /* %STRINGPOOLSTART% */
+                                if (quirk & SK_SMART_QUIRK_233_MEDIAWEAROUTINDICATOR) {
+                                        static const SkSmartAttributeInfo a = {
+                                                "media-wearout-indicator", SK_SMART_ATTRIBUTE_UNIT_UNKNOWN, NULL
+                                        };
+                                        return &a;
+                                }
+                                /* %STRINGPOOLSTOP% */
+                                break;
+
                 }
         }
 
