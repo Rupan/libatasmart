@@ -1208,6 +1208,8 @@ static void make_pretty(SkSmartAttributeParsedData *a) {
         else if (!strcmp(a->name, "reallocated-sector-count") ||
                  !strcmp(a->name, "current-pending-sector"))
                 a->pretty_value = fourtyeight & 0xFFFFFFFFU;
+        else if (!strcmp(a->name, "endurance-remaining"))
+                a->pretty_value = a->current_value;
         else
                 a->pretty_value = fourtyeight;
 }
@@ -1327,7 +1329,7 @@ static const SkSmartAttributeInfo const attribute_info[256] = {
         [231] = { "temperature-celsius",         SK_SMART_ATTRIBUTE_UNIT_MKELVIN,  verify_temperature },
 
         /* http://www.adtron.com/pdf/SMART_for_XceedLite_SATA_RevA.pdf */
-        [232] = { "endurance-remaining",         SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
+        [232] = { "endurance-remaining",         SK_SMART_ATTRIBUTE_UNIT_PERCENT,  NULL },
         [233] = { "power-on-seconds-2",          SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
         [234] = { "uncorrectable-ecc-count",     SK_SMART_ATTRIBUTE_UNIT_SECTORS,  NULL },
         [235] = { "good-block-rate",             SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
@@ -1891,7 +1893,8 @@ const char* sk_smart_attribute_unit_to_string(SkSmartAttributeUnit unit) {
                 [SK_SMART_ATTRIBUTE_UNIT_NONE] = "",
                 [SK_SMART_ATTRIBUTE_UNIT_MSECONDS] = "ms",
                 [SK_SMART_ATTRIBUTE_UNIT_SECTORS] = "sectors",
-                [SK_SMART_ATTRIBUTE_UNIT_MKELVIN] = "mK"
+                [SK_SMART_ATTRIBUTE_UNIT_MKELVIN] = "mK",
+                [SK_SMART_ATTRIBUTE_UNIT_PERCENT] = "%"
         };
         /* %STRINGPOOLSTOP% */
 
@@ -2226,6 +2229,10 @@ static char *print_value(char *s, size_t len, uint64_t pretty_value, SkSmartAttr
 
                 case SK_SMART_ATTRIBUTE_UNIT_SECTORS:
                         snprintf(s, len, "%llu sectors", (unsigned long long) pretty_value);
+                        break;
+
+                case SK_SMART_ATTRIBUTE_UNIT_PERCENT:
+                        snprintf(s, len, "%llu%%", (unsigned long long) pretty_value);
                         break;
 
                 case SK_SMART_ATTRIBUTE_UNIT_NONE:

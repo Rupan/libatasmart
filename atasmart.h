@@ -133,6 +133,7 @@ typedef enum SkSmartAttributeUnit {
         SK_SMART_ATTRIBUTE_UNIT_MSECONDS,    /* milliseconds */
         SK_SMART_ATTRIBUTE_UNIT_SECTORS,
         SK_SMART_ATTRIBUTE_UNIT_MKELVIN,     /* millikelvin */
+        SK_SMART_ATTRIBUTE_UNIT_PERCENT,
         _SK_SMART_ATTRIBUTE_UNIT_MAX
 
         /* This enum may be extended at any time without this being
