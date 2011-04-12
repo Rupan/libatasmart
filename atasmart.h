@@ -134,7 +134,7 @@ typedef enum SkSmartAttributeUnit {
         SK_SMART_ATTRIBUTE_UNIT_SECTORS,
         SK_SMART_ATTRIBUTE_UNIT_MKELVIN,       /* millikelvin */
         SK_SMART_ATTRIBUTE_UNIT_SMALL_PERCENT, /* percentage with 3 decimal points */
-        SK_SMART_ATTRIBUTE_UNIT_PERCENT,
+        SK_SMART_ATTRIBUTE_UNIT_PERCENT,       /* integer percentage */
         SK_SMART_ATTRIBUTE_UNIT_MB,
         _SK_SMART_ATTRIBUTE_UNIT_MAX
 
