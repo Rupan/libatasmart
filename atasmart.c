@@ -1375,6 +1375,7 @@ typedef enum SkSmartQuirk {
         SK_SMART_QUIRK_226_TIMEWORKLOADMEDIAWEAR   = 0x040000,
         SK_SMART_QUIRK_227_TIMEWORKLOADHOSTREADS   = 0x080000,
         SK_SMART_QUIRK_228_WORKLOADTIMER           = 0x100000,
+        SK_SMART_QUIRK_3_UNUSED                    = 0x200000
 } SkSmartQuirk;
 
 /* %STRINGPOOLSTART% */
@@ -1550,6 +1551,7 @@ static const SkSmartQuirkDatabase quirk_database[] = { {
         /*** Intel */
                 "^INTEL SSDSA2CW[0-9]{3}G3$",
                 NULL,
+                SK_SMART_QUIRK_3_UNUSED|
                 SK_SMART_QUIRK_4_UNUSED|
                 SK_SMART_QUIRK_225_TOTALLBASWRITTEN|
                 SK_SMART_QUIRK_226_TIMEWORKLOADMEDIAWEAR|
@@ -1639,6 +1641,18 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
 
         if (quirk) {
                 switch (id) {
+                        case 3:
+                                /* %STRINGPOOLSTART% */
+                                if (quirk & SK_SMART_QUIRK_3_UNUSED) {
+                                        static const SkSmartAttributeInfo a = {
+                                                "spin-up-time", SK_SMART_ATTRIBUTE_UNIT_UNKNOWN, NULL
+                                        };
+                                        return &a;
+                                }
+                                /* %STRINGPOOLSTOP% */
+
+                                break;
+
                         case 4:
                                 /* %STRINGPOOLSTART% */
                                 if (quirk & SK_SMART_QUIRK_4_UNUSED) {
