@@ -130,9 +130,10 @@ unsigned sk_smart_self_test_polling_minutes(const SkSmartParsedData *d, SkSmartS
 typedef enum SkSmartAttributeUnit {
         SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,
         SK_SMART_ATTRIBUTE_UNIT_NONE,
-        SK_SMART_ATTRIBUTE_UNIT_MSECONDS,    /* milliseconds */
+        SK_SMART_ATTRIBUTE_UNIT_MSECONDS,      /* milliseconds */
         SK_SMART_ATTRIBUTE_UNIT_SECTORS,
-        SK_SMART_ATTRIBUTE_UNIT_MKELVIN,     /* millikelvin */
+        SK_SMART_ATTRIBUTE_UNIT_MKELVIN,       /* millikelvin */
+        SK_SMART_ATTRIBUTE_UNIT_SMALL_PERCENT, /* percentage with 3 decimal points */
         SK_SMART_ATTRIBUTE_UNIT_PERCENT,
         SK_SMART_ATTRIBUTE_UNIT_MB,
         _SK_SMART_ATTRIBUTE_UNIT_MAX

@@ -1214,6 +1214,11 @@ static void make_pretty(SkSmartAttributeParsedData *a) {
         else if (!strcmp(a->name, "total-lbas-written") ||
                  !strcmp(a->name, "total-lbas-read"))
                 a->pretty_value = fourtyeight * 65536LLU * 512LLU / 1000000LLU;
+        else if (!strcmp(a->name, "timed-workload-media-wear") ||
+                 !strcmp(a->name, "timed-workload-host-reads"))
+                a->pretty_value = (double)fourtyeight / 1024LLU;
+        else if (!strcmp(a->name, "workload-timer"))
+                a->pretty_value = fourtyeight * 60 * 1000;
         else
                 a->pretty_value = fourtyeight;
 }
@@ -1349,24 +1354,27 @@ static const SkSmartAttributeInfo const attribute_info[256] = {
 /* %STRINGPOOLSTOP% */
 
 typedef enum SkSmartQuirk {
-        SK_SMART_QUIRK_9_POWERONMINUTES            = 0x00001,
-        SK_SMART_QUIRK_9_POWERONSECONDS            = 0x00002,
-        SK_SMART_QUIRK_9_POWERONHALFMINUTES        = 0x00004,
-        SK_SMART_QUIRK_192_EMERGENCYRETRACTCYCLECT = 0x00008,
-        SK_SMART_QUIRK_193_LOADUNLOAD              = 0x00010,
-        SK_SMART_QUIRK_194_10XCELSIUS              = 0x00020,
-        SK_SMART_QUIRK_194_UNKNOWN                 = 0x00040,
-        SK_SMART_QUIRK_200_WRITEERRORCOUNT         = 0x00080,
-        SK_SMART_QUIRK_201_DETECTEDTACOUNT         = 0x00100,
-        SK_SMART_QUIRK_5_UNKNOWN                   = 0x00200,
-        SK_SMART_QUIRK_9_UNKNOWN                   = 0x00400,
-        SK_SMART_QUIRK_197_UNKNOWN                 = 0x00800,
-        SK_SMART_QUIRK_198_UNKNOWN                 = 0x01000,
-        SK_SMART_QUIRK_190_UNKNOWN                 = 0x02000,
-        SK_SMART_QUIRK_232_AVAILABLERESERVEDSPACE  = 0x04000,
-        SK_SMART_QUIRK_233_MEDIAWEAROUTINDICATOR   = 0x08000,
-        SK_SMART_QUIRK_225_TOTALLBASWRITTEN        = 0x10000,
-        SK_SMART_QUIRK_4_UNUSED                    = 0x20000
+        SK_SMART_QUIRK_9_POWERONMINUTES            = 0x000001,
+        SK_SMART_QUIRK_9_POWERONSECONDS            = 0x000002,
+        SK_SMART_QUIRK_9_POWERONHALFMINUTES        = 0x000004,
+        SK_SMART_QUIRK_192_EMERGENCYRETRACTCYCLECT = 0x000008,
+        SK_SMART_QUIRK_193_LOADUNLOAD              = 0x000010,
+        SK_SMART_QUIRK_194_10XCELSIUS              = 0x000020,
+        SK_SMART_QUIRK_194_UNKNOWN                 = 0x000040,
+        SK_SMART_QUIRK_200_WRITEERRORCOUNT         = 0x000080,
+        SK_SMART_QUIRK_201_DETECTEDTACOUNT         = 0x000100,
+        SK_SMART_QUIRK_5_UNKNOWN                   = 0x000200,
+        SK_SMART_QUIRK_9_UNKNOWN                   = 0x000400,
+        SK_SMART_QUIRK_197_UNKNOWN                 = 0x000800,
+        SK_SMART_QUIRK_198_UNKNOWN                 = 0x001000,
+        SK_SMART_QUIRK_190_UNKNOWN                 = 0x002000,
+        SK_SMART_QUIRK_232_AVAILABLERESERVEDSPACE  = 0x004000,
+        SK_SMART_QUIRK_233_MEDIAWEAROUTINDICATOR   = 0x008000,
+        SK_SMART_QUIRK_225_TOTALLBASWRITTEN        = 0x010000,
+        SK_SMART_QUIRK_4_UNUSED                    = 0x020000,
+        SK_SMART_QUIRK_226_TIMEWORKLOADMEDIAWEAR   = 0x040000,
+        SK_SMART_QUIRK_227_TIMEWORKLOADHOSTREADS   = 0x080000,
+        SK_SMART_QUIRK_228_WORKLOADTIMER           = 0x100000,
 } SkSmartQuirk;
 
 /* %STRINGPOOLSTART% */
@@ -1544,6 +1552,9 @@ static const SkSmartQuirkDatabase quirk_database[] = { {
                 NULL,
                 SK_SMART_QUIRK_4_UNUSED|
                 SK_SMART_QUIRK_225_TOTALLBASWRITTEN|
+                SK_SMART_QUIRK_226_TIMEWORKLOADMEDIAWEAR|
+                SK_SMART_QUIRK_227_TIMEWORKLOADHOSTREADS|
+                SK_SMART_QUIRK_228_WORKLOADTIMER|
                 SK_SMART_QUIRK_232_AVAILABLERESERVEDSPACE|
                 SK_SMART_QUIRK_233_MEDIAWEAROUTINDICATOR
         }, {
@@ -1743,6 +1754,42 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
                                 if (quirk & SK_SMART_QUIRK_225_TOTALLBASWRITTEN) {
                                         static const SkSmartAttributeInfo a = {
                                                 "total-lbas-written", SK_SMART_ATTRIBUTE_UNIT_MB, NULL
+                                        };
+                                        return &a;
+                                }
+                                /* %STRINGPOOLSTOP% */
+
+                                break;
+
+                        case 226:
+                                /* %STRINGPOOLSTART% */
+                                if (quirk & SK_SMART_QUIRK_226_TIMEWORKLOADMEDIAWEAR) {
+                                        static const SkSmartAttributeInfo a = {
+                                                "timed-workload-media-wear", SK_SMART_ATTRIBUTE_UNIT_SMALL_PERCENT, NULL
+                                        };
+                                        return &a;
+                                }
+                                /* %STRINGPOOLSTOP% */
+
+                                break;
+
+                        case 227:
+                                /* %STRINGPOOLSTART% */
+                                if (quirk & SK_SMART_QUIRK_227_TIMEWORKLOADHOSTREADS) {
+                                        static const SkSmartAttributeInfo a = {
+                                                "timed-workload-host-reads", SK_SMART_ATTRIBUTE_UNIT_SMALL_PERCENT, NULL
+                                        };
+                                        return &a;
+                                }
+                                /* %STRINGPOOLSTOP% */
+
+                                break;
+
+                        case 228:
+                                /* %STRINGPOOLSTART% */
+                                if (quirk & SK_SMART_QUIRK_228_WORKLOADTIMER) {
+                                        static const SkSmartAttributeInfo a = {
+                                                "workload-timer", SK_SMART_ATTRIBUTE_UNIT_MSECONDS, NULL
                                         };
                                         return &a;
                                 }
@@ -1964,6 +2011,7 @@ const char* sk_smart_attribute_unit_to_string(SkSmartAttributeUnit unit) {
                 [SK_SMART_ATTRIBUTE_UNIT_SECTORS] = "sectors",
                 [SK_SMART_ATTRIBUTE_UNIT_MKELVIN] = "mK",
                 [SK_SMART_ATTRIBUTE_UNIT_PERCENT] = "%",
+                [SK_SMART_ATTRIBUTE_UNIT_SMALL_PERCENT] = "%",
                 [SK_SMART_ATTRIBUTE_UNIT_MB] = "MB"
         };
         /* %STRINGPOOLSTOP% */
@@ -2303,6 +2351,10 @@ static char *print_value(char *s, size_t len, uint64_t pretty_value, SkSmartAttr
 
                 case SK_SMART_ATTRIBUTE_UNIT_PERCENT:
                         snprintf(s, len, "%llu%%", (unsigned long long) pretty_value);
+                        break;
+
+                case SK_SMART_ATTRIBUTE_UNIT_SMALL_PERCENT:
+                        snprintf(s, len, "%0.3f%%", (double) pretty_value);
                         break;
 
                 case SK_SMART_ATTRIBUTE_UNIT_MB:
