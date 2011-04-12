@@ -1826,7 +1826,7 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
                                 /* %STRINGPOOLSTART% */
                                 if (quirk & SK_SMART_QUIRK_233_MEDIAWEAROUTINDICATOR) {
                                         static const SkSmartAttributeInfo a = {
-                                                "media-wearout-indicator", SK_SMART_ATTRIBUTE_UNIT_UNKNOWN, NULL
+                                                "media-wearout-indicator", SK_SMART_ATTRIBUTE_UNIT_PERCENT, NULL
                                         };
                                         return &a;
                                 }
