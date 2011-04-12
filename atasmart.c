@@ -1213,7 +1213,7 @@ static void make_pretty(SkSmartAttributeParsedData *a) {
                 a->pretty_value = a->current_value;
         else if (!strcmp(a->name, "total-lbas-written") ||
                  !strcmp(a->name, "total-lbas-read"))
-                a->pretty_value = fourtyeight * 65535 * 512 / 1000000000;
+                a->pretty_value = fourtyeight * 65536LLU * 512LLU / 1000000LLU;
         else
                 a->pretty_value = fourtyeight;
 }
@@ -1340,8 +1340,8 @@ static const SkSmartAttributeInfo const attribute_info[256] = {
         [235] = { "good-block-rate",             SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
 
         [240] = { "head-flying-hours",           SK_SMART_ATTRIBUTE_UNIT_MSECONDS, verify_long_time },
-        [241] = { "total-lbas-written",          SK_SMART_ATTRIBUTE_UNIT_GB,  NULL },
-        [242] = { "total-lbas-read",             SK_SMART_ATTRIBUTE_UNIT_GB,  NULL },
+        [241] = { "total-lbas-written",          SK_SMART_ATTRIBUTE_UNIT_MB,  NULL },
+        [242] = { "total-lbas-read",             SK_SMART_ATTRIBUTE_UNIT_MB,  NULL },
         [250] = { "read-error-retry-rate",       SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL }
 };
 /* %STRINGPOOLSTOP% */
@@ -1740,7 +1740,7 @@ static const SkSmartAttributeInfo *lookup_attribute(SkDisk *d, uint8_t id) {
                                 /* %STRINGPOOLSTART% */
                                 if (quirk & SK_SMART_QUIRK_225_TOTALLBASWRITTEN) {
                                         static const SkSmartAttributeInfo a = {
-                                                "total-lbas-written", SK_SMART_ATTRIBUTE_UNIT_GB, NULL
+                                                "total-lbas-written", SK_SMART_ATTRIBUTE_UNIT_MB, NULL
                                         };
                                         return &a;
                                 }
@@ -1962,7 +1962,7 @@ const char* sk_smart_attribute_unit_to_string(SkSmartAttributeUnit unit) {
                 [SK_SMART_ATTRIBUTE_UNIT_SECTORS] = "sectors",
                 [SK_SMART_ATTRIBUTE_UNIT_MKELVIN] = "mK",
                 [SK_SMART_ATTRIBUTE_UNIT_PERCENT] = "%",
-                [SK_SMART_ATTRIBUTE_UNIT_GB] = "GB"
+                [SK_SMART_ATTRIBUTE_UNIT_MB] = "MB"
         };
         /* %STRINGPOOLSTOP% */
 
@@ -2303,8 +2303,13 @@ static char *print_value(char *s, size_t len, uint64_t pretty_value, SkSmartAttr
                         snprintf(s, len, "%llu%%", (unsigned long long) pretty_value);
                         break;
 
-                case SK_SMART_ATTRIBUTE_UNIT_GB:
-                        snprintf(s, len, "%llu GB", (unsigned long long) pretty_value);
+                case SK_SMART_ATTRIBUTE_UNIT_MB:
+                        if (pretty_value >= 1000000LLU)
+                          snprintf(s, len, "%0.3f TB",  (double) pretty_value / 1000000LLU);
+                        else if (pretty_value >= 1000LLU)
+                          snprintf(s, len, "%0.3f GB",  (double) pretty_value / 1000LLU);
+                        else
+                          snprintf(s, len, "%llu MB", (unsigned long long) pretty_value);
                         break;
 
                 case SK_SMART_ATTRIBUTE_UNIT_NONE:
