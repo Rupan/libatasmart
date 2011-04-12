@@ -1395,6 +1395,13 @@ static const char *quirk_name[] = {
         "198_UNKNOWN",
         "190_UNKNOWN",
         "232_AVAILABLERESERVEDSPACE",
+        "233_MEDIAWEAROUTINDICATOR",
+        "225_TOTALLBASWRITTEN",
+        "4_UNUSED",
+        "226_TIMEWORKLOADMEDIAWEAR",
+        "227_TIMEWORKLOADHOSTREADS",
+        "228_WORKLOADTIMER",
+        "3_UNUSED",
         NULL
 };
 /* %STRINGPOOLSTOP% */
