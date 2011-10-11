@@ -19,7 +19,7 @@
 dist_doc_DATA = README
 
 EXTRA_DIST = \
-	bootstrap.sh \
+	autogen.sh \
 	LGPL \
 	README \
 	atasmart.c \
