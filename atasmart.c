@@ -1274,7 +1274,7 @@ static void verify_sectors(SkDisk *d, SkSmartAttributeParsedData *a) {
         max_sectors = d->size / 512ULL;
 
         if (a->pretty_value == 0xffffffffULL ||
-            a->pretty_value == 0xffffffffffffffffULL ||
+            a->pretty_value == 0xffffffffffffULL ||
             (max_sectors > 0 && a->pretty_value > max_sectors)) {
                 a->pretty_value = SK_SMART_ATTRIBUTE_UNIT_UNKNOWN;
                 d->attribute_verification_bad = TRUE;
