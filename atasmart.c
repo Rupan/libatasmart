@@ -2285,9 +2285,10 @@ int sk_disk_smart_get_overall(SkDisk *d, SkSmartOverall *overall) {
                 sectors = 0;
         } else {
 
-                /* We use log2(n_sectors) as a threshold here. We had to pick
-                 * something, and this makes a bit of sense, or doesn't it? */
-                sector_threshold = u64log2(d->size/512);
+                /* We use log2(n_sectors)*1024 as a threshold here. We
+                 * had to pick something, and this makes a bit of
+                 * sense, or doesn't it? */
+                sector_threshold = u64log2(d->size/512) * 1024;
 
                 if (sectors >= sector_threshold) {
                         *overall = SK_SMART_OVERALL_BAD_SECTOR_MANY;
