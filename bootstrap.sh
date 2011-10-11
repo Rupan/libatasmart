@@ -2,7 +2,7 @@
 
 # This file is part of libatasmart.
 #
-# Copyright 2008 Lennart Poettering
+# Copyright 2008-2011 Lennart Poettering
 #
 # libatasmart is free software; you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as
@@ -15,10 +15,11 @@
 # Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public
-# License along with libatasmart. If not, If not, see
+# License along with libatasmart; If not, see
 # <http://www.gnu.org/licenses/>.
 
-VERSION=1.11
+AM_VERSION=1.11
+AC_VERSION=2.63
 
 run_versioned() {
     local P
@@ -29,11 +30,11 @@ run_versioned() {
     if [ -e "`which $1$V 2> /dev/null`" ] ; then
         P="$1$V"
     else
-	if [ -e "`which $1-$2 2> /dev/null`" ] ; then
+        if [ -e "`which $1-$2 2> /dev/null`" ] ; then
             P="$1-$2"
-	else
-	    P="$1"
-	fi
+        else
+            P="$1"
+        fi
     fi
 
     shift 2
@@ -42,25 +43,40 @@ run_versioned() {
 
 set -ex
 
+if [ -f .git/hooks/pre-commit.sample -a ! -f .git/hooks/pre-commit ] ; then
+    cp -p .git/hooks/pre-commit.sample .git/hooks/pre-commit && \
+    chmod +x .git/hooks/pre-commit && \
+    echo "Activated pre-commit hook."
+fi
+
+if type -p colorgcc > /dev/null ; then
+   export CC=colorgcc
+fi
+
+libdir() {
+    echo $(cd $1/$(gcc -print-multi-os-directory); pwd)
+}
+
 if [ "x$1" = "xam" ] ; then
-    run_versioned automake "$VERSION" -a -c --foreign
+    run_versioned automake "$AM_VERSION" -a -c --foreign
     ./config.status
 else
     rm -rf autom4te.cache
     rm -f config.cache
 
-    touch config.rpath
-    test "x$LIBTOOLIZE" = "x" && LIBTOOLIZE=libtoolize
+    libtoolize -c --force
+    run_versioned aclocal "$AM_VERSION" -I m4
+    run_versioned autoconf "$AC_VERSION" -Wall
+    run_versioned autoheader "$AC_VERSION"
+    run_versioned automake "$AM_VERSION" --copy --foreign --add-missing
 
-    mkdir -p m4
-    "$LIBTOOLIZE" -c --force
-    run_versioned aclocal "$VERSION" -I m4
-    run_versioned autoconf 2.63 -Wall
-    run_versioned autoheader 2.63
-    run_versioned automake "$VERSION" --copy --foreign --add-missing
-
-    if test "x$NOCONFIGURE" = "x"; then
-        CFLAGS="-g -O0" ./configure --sysconfdir=/etc --localstatedir=/var "$@"
+    if [ "x$1" != "xac" ]; then
+        CFLAGS="$CFLAGS -g -O0" ./configure \
+          --sysconfdir=/etc \
+          --localstatedir=/var \
+          --libexecdir=/usr/lib \
+          --libdir=$(libdir /usr/local/lib) \
+          "$@"
         make clean
     fi
 fi
