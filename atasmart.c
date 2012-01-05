@@ -1567,7 +1567,7 @@ static const SkSmartQuirkDatabase quirk_database[] = { {
         }, {
 
         /*** Intel */
-                "^INTEL SSDSA2CW[0-9]{3}G3$",
+                "^INTEL SSDSA2(CT|BT|CW|BW)[0-9]{3}G3.*$", /* 320 Series */
                 NULL,
                 SK_SMART_QUIRK_3_UNUSED|
                 SK_SMART_QUIRK_4_UNUSED|
