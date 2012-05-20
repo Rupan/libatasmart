@@ -35,7 +35,7 @@ AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([foreign 1.11 -Wall -Wno-portability silent-rules tar-pax no-dist-gzip dist-xz])
 AM_SILENT_RULES([yes])
 
-AC_SUBST(LIBATASMART_VERSION_INFO, [4:4:0])
+AC_SUBST(LIBATASMART_VERSION_INFO, [4:5:0])
 
 if type -p stow > /dev/null && test -d /usr/local/stow ; then
         AC_MSG_NOTICE([*** Found /usr/local/stow: default install prefix set to /usr/local/stow/${PACKAGE_NAME}-${PACKAGE_VERSION} ***])
