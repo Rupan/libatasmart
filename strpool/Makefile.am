@@ -17,12 +17,11 @@
 # <http://www.gnu.org/licenses/>.
 
 CC = @CC_FOR_BUILD@
-CFLAGS = @BUILD_CFLAGS@
-LDFLAGS = @BUILD_LDFLAGS@
+AM_CFLAGS = @BUILD_CFLAGS@
+AM_LDFLAGS = @BUILD_LDFLAGS@
 
 noinst_PROGRAMS = \
 	strpool
 
 strpool_SOURCES = \
 	../strpool.c
-

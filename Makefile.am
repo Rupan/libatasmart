@@ -16,6 +16,9 @@
 # License along with libatasmart. If not, If not, see
 # <http://www.gnu.org/licenses/>.
 
+AM_CFLAGS = $(WARNINGFLAGS)
+AM_LDFLAGS = $(GCLDFLAGS)
+
 dist_doc_DATA = README
 
 EXTRA_DIST = \
