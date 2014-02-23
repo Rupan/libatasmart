@@ -20,35 +20,23 @@
     <http://www.gnu.org/licenses/>.
 ***/
 
-/***
-    Python bindings for libatasmart
-    TODO:
-    sk_disk_smart_read_data() is called perhaps too much.  Probably there
-    should be a refresh() function, possibly called after N seconds
-    automatically, which updates the smart data.  Or perhaps the init
-    function should attempt to read the SMART data once, then each
-    subroutine call should define a "refresh" parameter which defaults
-    to false.
-    Also there may be lurking issues with threading; if multiple calls
-    to the same object happen simultaneously, the behavior is likely
-    undefined.  The correct fix is probably to (again) define a refresh()
-    function with some sort of locking (pthread_mutex_t?).
-***/
-
 #include <Python.h>
 #include <structmember.h>
 
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
+#include <pthread.h>
 
 #include <atasmart.h>
 
+static const char *no_smart = "SMART not available for this device";
 static PyObject *pySmartError = NULL;
 
 typedef struct {
     PyObject_HEAD
     char name[32];       /* The device to which this object refers */
+    pthread_mutex_t mtx; /* The mutex for the SMART read operations */
     SkDisk *sk;          /* The handle for atasmart library calls */
     SkBool can_smart;    /* TRUE is the disk has SMART capability */
     SkBool can_identify; /*  TRUE if hte disk supports identify */
@@ -60,7 +48,7 @@ static PyObject *pySkDisk_close(pySkDisk *self) {
       self->sk = NULL;
       memset((void *)self->name, (int)0x00, sizeof(self->name));
     }
-
+    pthread_mutex_destroy(&self->mtx);
     Py_INCREF(Py_None);
     return Py_None;
 }
@@ -82,6 +70,10 @@ static PyObject *pySkDisk_new(PyTypeObject *type, PyObject *args, PyObject *kwds
     }
 
     /* initialize members with sane defaults */
+    if(pthread_mutex_init(&self->mtx, NULL) != 0) {
+        self->ob_type->tp_free((PyObject*)self);
+        return PyErr_SetFromErrno(pySmartError);
+    }
     memset((void *)self->name, (int)0x00, sizeof(self->name));
     self->sk = NULL;
     self->can_smart = FALSE;
@@ -119,6 +111,16 @@ static int pySkDisk_init(pySkDisk *self, PyObject *args, PyObject *kwds) {
         return -1;
     }
 
+    if(self->can_smart == TRUE) {
+        sts = sk_disk_smart_read_data(self->sk);
+        if(sts < 0) {
+            sk_disk_free(self->sk);
+            self->sk = NULL;
+            PyErr_SetString(pySmartError, "Device reported SMART is available but unable to retrieve SMART data");
+            return -1;
+        }
+    }
+
     sts = sk_disk_identify_is_available(self->sk, &self->can_identify);
     if(sts < 0) {
         sk_disk_free(self->sk);
@@ -129,6 +131,25 @@ static int pySkDisk_init(pySkDisk *self, PyObject *args, PyObject *kwds) {
 
     strncpy(self->name, name, sizeof(self->name));
     return 0;
+}
+
+/* attempt to read SMART data from the disk */
+static PyObject *pySkDisk_refresh(pySkDisk *self) {
+    int sts;
+
+    if(self->can_smart == FALSE) {
+        PyErr_SetString(pySmartError, no_smart);
+        return NULL;
+    }
+    if(pthread_mutex_lock(&self->mtx) != 0)
+        return PyErr_SetFromErrno(pySmartError);
+    sts = sk_disk_smart_read_data(self->sk);
+    if(sts < 0) return PyErr_SetFromErrno(pySmartError);
+    if(pthread_mutex_unlock(&self->mtx) != 0)
+        return PyErr_SetFromErrno(pySmartError);
+
+    Py_INCREF(Py_None);
+    return Py_None;
 }
 
 /* returns the size of the disk in bytes */
@@ -158,15 +179,14 @@ static PyObject *pySkDisk_awake(pySkDisk *self) {
 
 static PyObject *pySkDisk_identify(pySkDisk *self) {
     int sts;
-    SkIdentifyParsedData *data;
+    const SkIdentifyParsedData *data;
 
     if(self->can_identify == FALSE) {
         PyErr_SetString(pySmartError, "Identify not available for this device");
         return NULL;
     }
-    sts = sk_disk_identify_parse(self->sk, (const struct SkIdentifyParsedData **)&data);
-    if(sts < 0)
-        return PyErr_SetFromErrno(pySmartError);
+    sts = sk_disk_identify_parse(self->sk, &data);
+    if(sts < 0) return PyErr_SetFromErrno(pySmartError);
 
     return Py_BuildValue("{s:s,s:s,s:s}", "serial", data->serial,
                          "firmware", data->firmware, "model", data->model);
@@ -177,29 +197,23 @@ static PyObject *pySkDisk_overall(pySkDisk *self) {
     SkSmartOverall overall;
 
     if(self->can_smart == FALSE) {
-        PyErr_SetString(pySmartError, "SMART not available for this device");
+        PyErr_SetString(pySmartError, no_smart);
         return NULL;
     }
-    sts = sk_disk_smart_read_data(self->sk);
-    if(sts < 0) return PyErr_SetFromErrno(pySmartError);
     sts = sk_disk_smart_get_overall(self->sk, &overall);
     if(sts < 0) return PyErr_SetFromErrno(pySmartError);
     return Py_BuildValue("s", sk_smart_overall_to_string(overall));
 }
 
-/* query whether SMART is available */
-static PyObject *pySkDisk_can_smart(pySkDisk *self) {
-    PyObject *ret;
-
-    ret = self->can_smart ? Py_True : Py_False;
-    Py_INCREF(ret);
-    return ret;
-}
-
-static PyObject *pySkDisk_smart_status(pySkDisk *self) {
+static PyObject *pySkDisk_status(pySkDisk *self) {
     int sts;
     PyObject *ret;
     SkBool good;
+
+    if(self->can_smart == FALSE) {
+        PyErr_SetString(pySmartError, no_smart);
+        return NULL;
+    }
 
     sts = sk_disk_smart_status(self->sk, &good);
     if(sts < 0) return PyErr_SetFromErrno(pySmartError);
@@ -209,23 +223,14 @@ static PyObject *pySkDisk_smart_status(pySkDisk *self) {
     return ret;
 }
 
-/* attempt to read SMART data from the disk */
-static PyObject *pySkDisk_smart_read_data(pySkDisk *self) {
-    int sts;
-
-    sts = sk_disk_smart_read_data(self->sk);
-    if(sts < 0) return PyErr_SetFromErrno(pySmartError);
-
-    Py_INCREF(Py_None);
-    return Py_None;
-}
-
 static PyObject *pySkDisk_bad_sectors(pySkDisk *self) {
     int sts;
     uint64_t bad;
 
-    sts = sk_disk_smart_read_data(self->sk);
-    if(sts < 0) return PyErr_SetFromErrno(pySmartError);
+    if(self->can_smart == FALSE) {
+        PyErr_SetString(pySmartError, no_smart);
+        return NULL;
+    }
     sts = sk_disk_smart_get_bad(self->sk, &bad);
     if(sts < 0) return PyErr_SetFromErrno(pySmartError);
     return Py_BuildValue("K", bad);
@@ -235,30 +240,36 @@ static PyObject *pySkDisk_temp(pySkDisk *self) {
     int sts;
     uint64_t mkelvin;
 
-    sts = sk_disk_smart_read_data(self->sk);
-    if(sts < 0) return PyErr_SetFromErrno(pySmartError);
+    if(self->can_smart == FALSE) {
+        PyErr_SetString(pySmartError, no_smart);
+        return NULL;
+    }
     sts = sk_disk_smart_get_temperature(self->sk, &mkelvin);
     if(sts < 0) return PyErr_SetFromErrno(pySmartError);
     return Py_BuildValue("K", mkelvin);
 }
 
-static PyObject *pySkDisk_get_power_cycle(pySkDisk *self) {
+static PyObject *pySkDisk_power_cycles(pySkDisk *self) {
     int sts;
     uint64_t count;
 
-    sts = sk_disk_smart_read_data(self->sk);
-    if(sts < 0) return PyErr_SetFromErrno(pySmartError);
+    if(self->can_smart == FALSE) {
+        PyErr_SetString(pySmartError, no_smart);
+        return NULL;
+    }
     sts = sk_disk_smart_get_power_cycle(self->sk, &count);
     if(sts < 0) return PyErr_SetFromErrno(pySmartError);
     return Py_BuildValue("K", count);
 }
 
-static PyObject *pySkDisk_get_power_on(pySkDisk *self) {
+static PyObject *pySkDisk_power_on(pySkDisk *self) {
     int sts;
     uint64_t mseconds;
 
-    sts = sk_disk_smart_read_data(self->sk);
-    if(sts < 0) return PyErr_SetFromErrno(pySmartError);
+    if(self->can_smart == FALSE) {
+        PyErr_SetString(pySmartError, no_smart);
+        return NULL;
+    }
     sts = sk_disk_smart_get_power_on(self->sk, &mseconds);
     if(sts < 0) return PyErr_SetFromErrno(pySmartError);
     return Py_BuildValue("K", mseconds);
@@ -266,13 +277,12 @@ static PyObject *pySkDisk_get_power_on(pySkDisk *self) {
 
 /* instance methods */
 static PyMethodDef pySkDisk_methods[] = {
-    {"power_on",       (PyCFunction)pySkDisk_get_power_on,          METH_NOARGS, "Get the disks power on time in milliseconds"},
-    {"power_cycle",    (PyCFunction)pySkDisk_get_power_cycle,       METH_NOARGS, "Get the disk's power cycle count"},
-    {"smart_temp",     (PyCFunction)pySkDisk_temp,                  METH_NOARGS, "Get the disk's temperature in kelvin"},
-    {"smart_read",     (PyCFunction)pySkDisk_smart_read_data,       METH_NOARGS, "Read SMART data from the disk"},
-    {"smart_status",   (PyCFunction)pySkDisk_smart_status,          METH_NOARGS, "Determine if SMART status is good or bad"},
+    {"power_on",       (PyCFunction)pySkDisk_power_on,              METH_NOARGS, "Get the disks power on time in milliseconds"},
+    {"power_cycles",   (PyCFunction)pySkDisk_power_cycles,          METH_NOARGS, "Get the disk's power cycle count"},
+    {"temp",           (PyCFunction)pySkDisk_temp,                  METH_NOARGS, "Get the disk's temperature in kelvin"},
+    {"refresh",        (PyCFunction)pySkDisk_refresh,               METH_NOARGS, "Read SMART data from the disk"},
+    {"status",         (PyCFunction)pySkDisk_status,                METH_NOARGS, "Determine if SMART status is good or bad"},
     {"bad_sectors",    (PyCFunction)pySkDisk_bad_sectors,           METH_NOARGS, "Get the number of bad sectors"},
-    {"can_smart",      (PyCFunction)pySkDisk_can_smart,             METH_NOARGS, "Query whether SMART is available"},
     {"overall",        (PyCFunction)pySkDisk_overall,               METH_NOARGS, "Get overall SMART status"},
     {"identify",       (PyCFunction)pySkDisk_identify,              METH_NOARGS, "Parse identifying strings from SMART data"},
     {"awake",          (PyCFunction)pySkDisk_awake,                 METH_NOARGS, "Determine if the  device is awake"},

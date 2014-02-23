@@ -6,7 +6,7 @@
 from distutils.core import setup, Extension
 
 atasmart = Extension('atasmart',
-                     libraries = ['atasmart'],
+                     libraries = ['atasmart', 'pthread'],
                      sources = ['atasmart_py.c'])
 
 setup(name='atasmart',
