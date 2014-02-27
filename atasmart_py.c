@@ -39,7 +39,8 @@ typedef struct {
     pthread_mutex_t mtx; /* The mutex for the SMART read operations */
     SkDisk *sk;          /* The handle for atasmart library calls */
     SkBool can_smart;    /* TRUE is the disk has SMART capability */
-    SkBool can_identify; /*  TRUE if hte disk supports identify */
+    SkBool can_identify; /* TRUE if the disk supports identify */
+    int sts, ste, stc, sta; /* SMART self-tests */
 } pySkDisk;
 
 static PyObject *pySkDisk_close(pySkDisk *self) {
@@ -78,6 +79,12 @@ static PyObject *pySkDisk_new(PyTypeObject *type, PyObject *args, PyObject *kwds
     self->sk = NULL;
     self->can_smart = FALSE;
     self->can_identify = FALSE;
+
+    /* test types from SkSmartSelfTest */
+    self->sts = SK_SMART_SELF_TEST_SHORT;
+    self->ste = SK_SMART_SELF_TEST_EXTENDED;
+    self->stc = SK_SMART_SELF_TEST_CONVEYANCE;
+    self->sta = SK_SMART_SELF_TEST_ABORT;
 
     return (PyObject *)self;
 }
@@ -275,8 +282,25 @@ static PyObject *pySkDisk_power_on(pySkDisk *self) {
     return Py_BuildValue("K", mseconds);
 }
 
+/* initiates or terminates one of several SMART self-tests */
+static PyObject *pySkDisk_self_test(pySkDisk *self, PyObject *args) {
+    int sts, test;
+
+    if(self->can_smart == FALSE) {
+        PyErr_SetString(pySmartError, no_smart);
+        return NULL;
+    }
+    if(!PyArg_ParseTuple(args, "i", &test)) return NULL;
+    sts = sk_disk_smart_self_test(self->sk, (SkSmartSelfTest)test);
+    if(sts < 0) return PyErr_SetFromErrno(pySmartError);
+
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
 /* instance methods */
 static PyMethodDef pySkDisk_methods[] = {
+    {"self_test",      (PyCFunction)pySkDisk_self_test,             METH_VARARGS, "Start or stop a self-test"},
     {"power_on",       (PyCFunction)pySkDisk_power_on,              METH_NOARGS, "Get the disks power on time in milliseconds"},
     {"power_cycles",   (PyCFunction)pySkDisk_power_cycles,          METH_NOARGS, "Get the disk's power cycle count"},
     {"temp",           (PyCFunction)pySkDisk_temp,                  METH_NOARGS, "Get the disk's temperature in kelvin"},
@@ -293,6 +317,10 @@ static PyMethodDef pySkDisk_methods[] = {
 
 /* no structure members exposed yet */
 static PyMemberDef pySkDisk_members[] = {
+    {"SELF_TEST_SHORT",      T_INT, offsetof(pySkDisk, sts), 0, "Short offline test"},
+    {"SELF_TEST_EXTENDED",   T_INT, offsetof(pySkDisk, ste), 0, "Extended offline test"},
+    {"SELF_TEST_CONVEYANCE", T_INT, offsetof(pySkDisk, stc), 0, "Conveyance offline test"},
+    {"SELF_TEST_ABORT",      T_INT, offsetof(pySkDisk, sta), 0, "Abort offline test"},
     {NULL}  /* Sentinel */
 };
 
