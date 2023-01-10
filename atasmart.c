@@ -1198,8 +1198,7 @@ static void make_pretty(SkSmartAttributeParsedData *a) {
         if (!strcmp(a->name, "spin-up-time"))
                 a->pretty_value = fourtyeight & 0xFFFF;
         else if (!strcmp(a->name, "airflow-temperature-celsius") ||
-                 !strcmp(a->name, "temperature-celsius") ||
-                 !strcmp(a->name, "temperature-celsius-2"))
+                 !strcmp(a->name, "temperature-celsius"))
                 a->pretty_value = (fourtyeight & 0xFFFF)*1000 + 273150;
         else if (!strcmp(a->name, "temperature-centi-celsius"))
                 a->pretty_value = (fourtyeight & 0xFFFF)*100 + 273150;
@@ -1332,7 +1331,7 @@ static const SkSmartAttributeInfo const attribute_info[256] = {
         [191] = { "g-sense-error-rate",          SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
         [192] = { "power-off-retract-count",     SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
         [193] = { "load-cycle-count",            SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
-        [194] = { "temperature-celsius-2",       SK_SMART_ATTRIBUTE_UNIT_MKELVIN,  verify_temperature },
+        [194] = { "temperature-celsius",         SK_SMART_ATTRIBUTE_UNIT_MKELVIN,  verify_temperature },
         [195] = { "hardware-ecc-recovered",      SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
         [196] = { "reallocated-event-count",     SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
         [197] = { "current-pending-sector",      SK_SMART_ATTRIBUTE_UNIT_SECTORS,  verify_sectors },
@@ -1358,7 +1357,7 @@ static const SkSmartAttributeInfo const attribute_info[256] = {
         [227] = { "torq-amp-count",              SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
         [228] = { "power-off-retract-count-2",   SK_SMART_ATTRIBUTE_UNIT_NONE,     NULL },
         [230] = { "head-amplitude",              SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
-        [231] = { "temperature-celsius",         SK_SMART_ATTRIBUTE_UNIT_MKELVIN,  verify_temperature },
+        [231] = { "ssd-life-left",               SK_SMART_ATTRIBUTE_UNIT_UNKNOWN,  NULL },
 
         /* http://www.adtron.com/pdf/SMART_for_XceedLite_SATA_RevA.pdf */
         [232] = { "endurance-remaining",         SK_SMART_ATTRIBUTE_UNIT_PERCENT,  NULL },
@@ -2075,7 +2074,6 @@ static void temperature_cb(SkDisk *d, const SkSmartAttributeParsedData *a, struc
 
         if (!strcmp(a->name, "temperature-centi-celsius") ||
             !strcmp(a->name, "temperature-celsius") ||
-            !strcmp(a->name, "temperature-celsius-2") ||
             !strcmp(a->name, "airflow-temperature-celsius")) {
 
                 if (!ah->found || a->pretty_value > *ah->value)
